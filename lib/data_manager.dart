@@ -55,9 +55,7 @@ class DataManager {
     String? ip = prefs.getString("esp_ip");
     int port = prefs.getInt("esp_port") ?? 80;
 
-    if (ip == null || ip.isEmpty) {
-      return false;
-    }
+    if (ip == null || ip.isEmpty) return false;
 
     String endpoint = isOn ? "/api/mainmotor/on" : "/api/mainmotor/off";
     try {
@@ -68,13 +66,34 @@ class DataManager {
         mainMotorOn = isOn;
         return true;
       }
-    } catch (e) {
-      print("Error toggling main motor: $e");
-    }
+    } catch (_) {}
     return false;
   }
 
-  // Real connection check
+  // Control Individual Plant Motor on ESP32
+  Future<bool> togglePlantMotorApi(int id, bool isOn) async {
+    final prefs = await SharedPreferences.getInstance();
+    String? ip = prefs.getString("esp_ip");
+    int port = prefs.getInt("esp_port") ?? 80;
+
+    if (ip == null || ip.isEmpty) return false;
+
+    String endpoint = isOn ? "/api/motor/on" : "/api/motor/off";
+    try {
+      final response = await http.post(Uri.parse("http://$ip:$port$endpoint?motor_id=$id"))
+          .timeout(const Duration(seconds: 3));
+      
+      if (response.statusCode == 200) {
+        int index = plants.indexWhere((p) => p.id == id);
+        if (index != -1) {
+          plants[index].isMotorOn = isOn;
+        }
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
   Future<bool> checkConnection() async {
     final prefs = await SharedPreferences.getInstance();
     String? ip = prefs.getString("esp_ip");
@@ -100,7 +119,6 @@ class DataManager {
 
   void simulateMoisture() {
     for (var plant in plants) {
-      // Simulate small changes
       plant.moistureLevel = 30 + Random().nextInt(40);
     }
   }

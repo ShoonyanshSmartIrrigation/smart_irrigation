@@ -12,18 +12,41 @@ class Esp32ConfigScreen extends StatefulWidget {
 }
 
 class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
-  String status = "Searching...";
-  String result = "Initializing discovery...";
+  String status = "Checking...";
+  String result = "Verifying current status...";
   bool isLoading = false;
   String? discoveredIp;
 
   @override
   void initState() {
     super.initState();
-    // Start discovery automatically when screen opens
+    // Check for existing connection before starting discovery
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      startAutoDiscovery();
+      _checkInitialStatus();
     });
+  }
+
+  Future<void> _checkInitialStatus() async {
+    setState(() {
+      isLoading = true;
+    });
+
+    final prefs = await SharedPreferences.getInstance();
+    String? savedIp = prefs.getString("esp_ip");
+    int savedPort = prefs.getInt("esp_port") ?? 80;
+
+    if (savedIp != null && savedIp.isNotEmpty) {
+      bool isConnected = await _verifyAndSave(savedIp, savedPort, "Saved Settings");
+      if (isConnected) {
+        setState(() {
+          isLoading = false;
+        });
+        return; // Already connected, no need to search
+      }
+    }
+
+    // If no saved IP or saved IP is unreachable, start auto discovery
+    startAutoDiscovery();
   }
 
   Future<void> saveData(String ip, int port) async {
@@ -36,8 +59,6 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
   // AUTO DISCOVERY (mDNS + Scan)
   // ===============================
   Future<void> startAutoDiscovery() async {
-    if (isLoading) return;
-
     setState(() {
       isLoading = true;
       status = "Searching...";
@@ -139,7 +160,7 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
         if (mounted) {
           setState(() {
             status = "Connected";
-            result = "✅ Found via $method!";
+            result = "✅ Device is connected!";
             discoveredIp = ip;
           });
         }

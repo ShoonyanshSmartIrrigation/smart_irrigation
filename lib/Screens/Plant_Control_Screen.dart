@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data_manager.dart';
 
 class PlantControlScreen extends StatefulWidget {
@@ -10,24 +14,89 @@ class PlantControlScreen extends StatefulWidget {
 
 class _PlantControlScreenState extends State<PlantControlScreen> {
   final DataManager dataManager = DataManager();
+  Timer? syncTimer;
+  String? espIp;
+  bool isSyncing = false;
 
   @override
   void initState() {
     super.initState();
+    _initAndStartSync();
   }
 
-  // Toggle motor
-  void togglePlantMotor(Plant plant) {
+  Future<void> _initAndStartSync() async {
+    final prefs = await SharedPreferences.getInstance();
     setState(() {
-      dataManager.updatePlantMotor(plant.id, !plant.isMotorOn);
+      espIp = prefs.getString("esp_ip");
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("${plant.name} Motor ${plant.isMotorOn ? "ON" : "OFF"}"),
-        duration: const Duration(milliseconds: 500),
-      ),
-    );
+    _fetchMoistureData();
+    
+    // Periodically sync moisture levels
+    syncTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _fetchMoistureData();
+    });
+  }
+
+  @override
+  void dispose() {
+    syncTimer?.cancel();
+    super.dispose();
+  }
+
+  // 🌱 Sync Moisture from ESP32
+  Future<void> _fetchMoistureData() async {
+    if (espIp == null || espIp!.isEmpty || isSyncing) return;
+
+    isSyncing = true;
+    try {
+      final res = await http.get(Uri.parse("http://$espIp/api/moisture"))
+          .timeout(const Duration(seconds: 3));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (mounted) {
+          setState(() {
+            for (var sensor in data["sensors"]) {
+              int id = sensor["sensor_id"];
+              int moisture = sensor["moisture"];
+              
+              int index = dataManager.plants.indexWhere((p) => p.id == id);
+              if (index != -1) {
+                dataManager.plants[index].moistureLevel = moisture;
+              }
+            }
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Moisture Sync Error: $e");
+    } finally {
+      isSyncing = false;
+    }
+  }
+
+  // 🔌 Motor Control via DataManager API
+  Future<void> togglePlantMotor(Plant plant) async {
+    // Show loading or disable interaction? For now just try.
+    bool success = await dataManager.togglePlantMotorApi(plant.id, !plant.isMotorOn);
+
+    if (success) {
+      setState(() {}); // Update UI
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("${plant.name} Motor ${plant.isMotorOn ? "ON" : "OFF"}"),
+          duration: const Duration(milliseconds: 500),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Failed to toggle motor. Check connection."),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -39,26 +108,28 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
         backgroundColor: const Color(0xFF2E7D32),
         foregroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
+        actions: [
+          if (isSyncing)
+            const Padding(
+              padding: EdgeInsets.only(right: 15),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+              ),
+            ),
+        ],
       ),
 
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFF2E7D32),
-        onPressed: () {
-          Navigator.pushNamed(context, '/settings');
-        },
+        onPressed: () => Navigator.pushNamed(context, '/settings'),
         child: const Icon(Icons.settings, color: Colors.white),
       ),
 
       body: Column(
         children: [
-          // 📊 Statistics Section
           _buildStatsHeader(),
-
-          // 🌱 Grid of Plants
           Expanded(
             child: GridView.builder(
               padding: const EdgeInsets.all(15),
@@ -83,9 +154,9 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
   Widget _buildStatsHeader() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2E7D32),
-        borderRadius: const BorderRadius.only(
+      decoration: const BoxDecoration(
+        color: Color(0xFF2E7D32),
+        borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(30),
           bottomRight: Radius.circular(30),
         ),
@@ -131,13 +202,13 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
   }
 
   Widget _buildPlantCard(Plant plant) {
+    Color moistureColor = plant.moistureLevel < 30 ? Colors.red : (plant.moistureLevel < 60 ? Colors.orange : Colors.green);
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))],
       ),
       child: Padding(
         padding: const EdgeInsets.all(15),
@@ -159,7 +230,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
               children: [
                 Text(plant.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 4),
-                Text("Moisture: ${plant.moistureLevel}%", style: const TextStyle(color: Colors.blueGrey, fontSize: 13)),
+                Text("Moisture: ${plant.moistureLevel}%", style: TextStyle(color: moistureColor, fontSize: 13, fontWeight: FontWeight.bold)),
               ],
             ),
             Column(
@@ -191,10 +262,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
       children: [
         Text(title, style: const TextStyle(color: Colors.white70, fontSize: 12)),
         const SizedBox(height: 5),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-        ),
+        Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
       ],
     );
   }
