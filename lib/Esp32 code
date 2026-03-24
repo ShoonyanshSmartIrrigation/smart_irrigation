@@ -1,0 +1,567 @@
+/*
+ * ESP32 Smart Irrigation - WiFi Only Version
+ * When motor ON → LED blinks
+ * When motor OFF → LED stops
+ * Features: WiFi Web Server Control Only
+ */
+
+#include <WiFi.h>
+#include <WebServer.h>
+
+const char* ssid = "Airtel_kris_8137";
+const char* password = "air31225";
+
+WebServer server(80);
+
+// Motor and Sensor Configuration
+const int NUM_MOTORS = 8;  // Individual motors
+const int MAIN_MOTOR_PIN = 2;  // Main motor control
+const int NUM_SENSORS = 8;
+
+// Individual Motor Pins - using safe GPIO pins
+const int MOTOR_PINS[NUM_MOTORS] = {25, 26, 18, 19, 27, 22, 23, 5};
+
+// Moisture Sensor Pins
+const int MOISTURE_SENSOR_PINS[NUM_SENSORS] = {36, 37, 38, 39, 34, 35, 32, 33};
+
+// Motor States
+bool motorStates[NUM_MOTORS] = {false};
+bool mainMotorState = false;
+unsigned long motorOnTimes[NUM_MOTORS] = {0};
+unsigned long mainMotorOnTime = 0;
+const unsigned long LED_DURATION = 3000; // 3 seconds in milliseconds
+
+// Moisture Sensor Values
+int moistureValues[NUM_SENSORS] = {0};
+int moisturePercents[NUM_SENSORS] = {0};
+
+void setup() {
+  Serial.begin(115200);
+  delay(2000);
+
+  // Initialize built-in LED for debugging
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+
+  Serial.println("🚀 ESP32 Starting...");
+
+  // Initialize Main Motor
+  Serial.println("🔧 Configuring Main Motor on GPIO " + String(MAIN_MOTOR_PIN));
+  pinMode(MAIN_MOTOR_PIN, OUTPUT);
+  digitalWrite(MAIN_MOTOR_PIN, LOW);
+  Serial.println("✅ Main Motor GPIO " + String(MAIN_MOTOR_PIN) + " configured");
+
+  // Initialize Individual Motor Pins
+  Serial.println("🔧 Configuring Individual Motors...");
+  for (int i = 0; i < NUM_MOTORS; i++) {
+    pinMode(MOTOR_PINS[i], OUTPUT);
+    digitalWrite(MOTOR_PINS[i], LOW);
+    Serial.println("   Motor " + String(i+1) + ": GPIO " + String(MOTOR_PINS[i]) + " OK");
+  }
+
+  // Initialize Moisture Sensors
+  Serial.println("🌱 Configuring Moisture Sensors...");
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    pinMode(MOISTURE_SENSOR_PINS[i], INPUT);
+    Serial.println("   Sensor " + String(i+1) + ": GPIO " + String(MOISTURE_SENSOR_PINS[i]) + " OK");
+  }
+
+  Serial.println("✅ All GPIO Configuration Complete!");
+  Serial.println("📡 Connecting to WiFi...");
+
+  // Connect to WiFi
+  Serial.print("Connecting to WiFi: ");
+  Serial.println(ssid);
+
+  WiFi.begin(ssid, password);
+
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+    delay(1000);
+    Serial.print(".");
+    attempts++;
+
+    // Try to read moisture sensors while connecting
+    if (attempts % 5 == 0) {
+      Serial.println("\n🌱 Reading sensors during WiFi setup...");
+      readAllMoistureSensors();
+    }
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\n✅ WiFi Connected!");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+
+    // Start moisture sensor readings immediately after WiFi connects
+    Serial.println("🌱 Starting moisture sensor readings...");
+    readAllMoistureSensors();
+  } else {
+    Serial.println("\n❌ WiFi Failed - Starting AP Mode");
+    WiFi.softAP("ESP32-Irrigation", "12345678");
+    Serial.print("AP IP: ");
+    Serial.println(WiFi.softAPIP());
+
+    // Start moisture sensor readings even in AP mode
+    Serial.println("🌱 Starting moisture sensor readings in AP mode...");
+    readAllMoistureSensors();
+  }
+
+  // Setup web server endpoints
+  setupServer();
+
+  server.begin();
+  Serial.println("🚀 HTTP Server Started!");
+  Serial.println("📱 Ready for Android App Connection");
+  Serial.println("🔍 Test URL: http://" + WiFi.localIP().toString() + "/api/system/status");
+}
+
+void loop() {
+  server.handleClient();
+
+  // Handle LED states for main motor and individual motors (3-second timer)
+  handleMainMotorLED();
+  handleIndividualMotorsLED();
+
+  // Read all moisture sensors every 2 seconds
+  readAllMoistureSensors();
+
+  // Report motor status every 5 seconds
+  reportMotorStatus();
+
+  // Debug: Show HTTP requests every 10 seconds
+  debugHTTPRequests();
+}
+
+void handleMainMotorLED() {
+  // Only print when state actually changes
+  static bool lastMainMotorState = false;
+
+  // Check if 3 seconds have passed since main motor was turned on
+  // Commented out - remove auto-off for manual control
+  // if (mainMotorState && (millis() - mainMotorOnTime >= LED_DURATION)) {
+  //   digitalWrite(MAIN_MOTOR_PIN, LOW); // Turn main motor OFF after 3 seconds
+  //   mainMotorState = false; // Update state
+  //   if (lastMainMotorState != mainMotorState) {
+  //     Serial.println("💡 Main Motor: OFF (3 seconds elapsed) - GPIO " + String(MAIN_MOTOR_PIN) + " = LOW");
+  //     lastMainMotorState = mainMotorState;
+  //   }
+  // } else if (mainMotorState && (millis() - mainMotorOnTime < LED_DURATION)) {
+    // Keep main motor ON when state is true (no auto-off)
+  if (mainMotorState) {
+    digitalWrite(MAIN_MOTOR_PIN, HIGH); // Keep main motor ON
+    // Only print once when motor turns ON
+    if (lastMainMotorState != mainMotorState) {
+      Serial.println("🔴 Main Motor: ON - GPIO " + String(MAIN_MOTOR_PIN) + " = HIGH (3.3V)");
+      lastMainMotorState = mainMotorState;
+    }
+  } else if (!mainMotorState) {
+    // Ensure motor is OFF when state is false
+    digitalWrite(MAIN_MOTOR_PIN, LOW);
+    if (lastMainMotorState != mainMotorState) {
+      Serial.println("⚫ Main Motor: OFF - GPIO " + String(MAIN_MOTOR_PIN) + " = LOW");
+      lastMainMotorState = mainMotorState;
+    }
+  }
+}
+
+void handleIndividualMotorsLED() {
+  static bool lastMotorStates[NUM_MOTORS] = {false};
+
+  for (int i = 0; i < NUM_MOTORS; i++) {
+    // Check if 3 seconds have passed since motor was turned on
+    // Commented out - remove auto-off for manual control
+    // if (motorStates[i] && (millis() - motorOnTimes[i] >= LED_DURATION)) {
+    //   digitalWrite(MOTOR_PINS[i], LOW); // Turn motor OFF after 3 seconds
+    //   motorStates[i] = false; // Update state
+    //   if (lastMotorStates[i] != motorStates[i]) {
+    //     Serial.println("💡 Motor " + String(i+1) + ": OFF (3 seconds elapsed)");
+    //     lastMotorStates[i] = motorStates[i];
+    //   }
+    // } else if (motorStates[i] && (millis() - motorOnTimes[i] < LED_DURATION)) {
+      // Keep motor ON when state is true (no auto-off)
+    if (motorStates[i]) {
+      digitalWrite(MOTOR_PINS[i], HIGH); // Keep motor ON
+      // Only print once when motor turns ON
+      if (lastMotorStates[i] != motorStates[i]) {
+        Serial.println("🔴 Motor " + String(i+1) + ": ON - GPIO " + String(MOTOR_PINS[i]) + " = HIGH (3.3V)");
+        lastMotorStates[i] = motorStates[i];
+      }
+    } else if (!motorStates[i]) {
+      // Ensure motor is OFF when state is false
+      digitalWrite(MOTOR_PINS[i], LOW);
+      if (lastMotorStates[i] != motorStates[i]) {
+        Serial.println("⚫ Motor " + String(i+1) + ": OFF - GPIO " + String(MOTOR_PINS[i]) + " = LOW");
+        lastMotorStates[i] = motorStates[i];
+      }
+    }
+  }
+}
+
+void debugHTTPRequests() {
+  static unsigned long lastHTTPDebug = 0;
+  const unsigned long HTTP_DEBUG_INTERVAL = 10000; // Debug every 10 seconds
+
+  if (millis() - lastHTTPDebug >= HTTP_DEBUG_INTERVAL) {
+    Serial.println("🌐 HTTP Server Status: Active");
+    Serial.println("🔍 Test URL: http://" + WiFi.localIP().toString() + "/test");
+    Serial.println("🔍 Echo URL: http://" + WiFi.localIP().toString() + "/echo");
+    Serial.println("📱 Main Motor ON URL: http://" + WiFi.localIP().toString() + "/api/mainmotor/on");
+    Serial.println("📱 Motor 1 ON URL: http://" + WiFi.localIP().toString() + "/api/motor/on?motor_id=1");
+    lastHTTPDebug = millis();
+  }
+
+  // Blink LED to show ESP32 is alive
+  static unsigned long lastBlink = 0;
+  if (millis() - lastBlink >= 2000) { // Blink every 2 seconds
+    static bool ledState = false;
+    ledState = !ledState;
+    digitalWrite(LED_BUILTIN, ledState);
+    lastBlink = millis();
+  }
+}
+
+void reportMotorStatus() {
+  static unsigned long lastMotorReport = 0;
+  const unsigned long MOTOR_REPORT_INTERVAL = 5000; // Report every 5 seconds
+
+  if (millis() - lastMotorReport >= MOTOR_REPORT_INTERVAL) {
+    Serial.println("🔧 MOTOR STATUS REPORT:");
+
+    // Main motor status
+    Serial.print("🔴 Main Motor (GPIO " + String(MAIN_MOTOR_PIN) + "): ");
+    Serial.println(mainMotorState ? "ON" : "OFF");
+
+    // Individual motors status
+    for (int i = 0; i < NUM_MOTORS; i++) {
+      Serial.print("🔧 Motor " + String(i+1) + " (GPIO " + String(MOTOR_PINS[i]) + "): ");
+      Serial.println(motorStates[i] ? "ON" : "OFF");
+    }
+    Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    lastMotorReport = millis();
+  }
+}
+
+void readAllMoistureSensors() {
+  static unsigned long lastMoistureRead = 0;
+  const unsigned long MOISTURE_READ_INTERVAL = 2000; // Read every 2 seconds
+
+  if (millis() - lastMoistureRead >= MOISTURE_READ_INTERVAL) {
+    for (int i = 0; i < NUM_SENSORS; i++) {
+      // Read analog value (0-4095 for ESP32 ADC)
+      moistureValues[i] = analogRead(MOISTURE_SENSOR_PINS[i]);
+
+      // Convert to percentage (inverted - higher value = more water)
+      // Typical range: Air (dry) = 3000+, Water (wet) = 1000-
+      moisturePercents[i] = map(moistureValues[i], 1000, 3000, 100, 0);
+      moisturePercents[i] = constrain(moisturePercents[i], 0, 100);
+
+      Serial.print("🌱 Sensor " + String(i+1) + " (GPIO " + String(MOISTURE_SENSOR_PINS[i]) + "): ");
+      Serial.print(moisturePercents[i]);
+      Serial.println("%");
+    }
+    Serial.println("---");
+    lastMoistureRead = millis();
+  }
+}
+
+void setupServer() {
+  // Global CORS headers for all responses
+  server.on("/api/cors", HTTP_OPTIONS, []() {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    server.send(200, "text/plain", "");
+  });
+
+  // Request logging middleware
+  server.onNotFound([]() {
+    String method = server.method() == HTTP_GET ? "GET" : "POST";
+    String body = server.method() == HTTP_POST ? server.arg("plain") : "";
+    Serial.println("🌐 HTTP Request: " + method + " " + server.uri());
+    if (body.length() > 0) {
+      Serial.println("📄 Body: " + body);
+    }
+    Serial.println("🔍 Headers: " + server.header("Content-Type"));
+    server.send(404, "text/plain", "Not Found");
+  });
+
+  // Test endpoint
+  server.on("/test", HTTP_GET, []() {
+    Serial.println("🌐 HTTP Request: GET /test");
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    String response = "{\"status\":\"ok\",\"message\":\"ESP32 Web Server is Working!\",\"uptime\":" + String(millis()) + "}";
+    server.send(200, "application/json", response);
+  });
+
+  // Simple echo endpoint for testing
+  server.on("/echo", HTTP_GET, []() {
+    Serial.println("🌐 HTTP Request: GET /echo");
+    Serial.println("📄 Client IP: " + server.client().remoteIP().toString());
+    Serial.println("🔍 Headers received: " + server.headers());
+
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    String response = "{\"echo\":\"ESP32 received your request\",\"timestamp\":" + String(millis()) + ",\"client_ip\":\"" + server.client().remoteIP().toString() + "\"}";
+    server.send(200, "application/json", response);
+  });
+
+  server.on("/echo", HTTP_POST, []() {
+    Serial.println("🌐 HTTP Request: POST /echo");
+    Serial.println("📄 Client IP: " + server.client().remoteIP().toString());
+    String body = server.arg("plain");
+    Serial.println("📄 Body received: " + body);
+
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    String response = "{\"echo\":\"ESP32 received your POST\",\"body\":\"" + body + "\",\"timestamp\":" + String(millis()) + "}";
+    server.send(200, "application/json", response);
+  });
+
+  // Root endpoint
+  server.on("/", HTTP_GET, []() {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    String html = "<!DOCTYPE html><html><head>";
+    html += "<title>ESP32 Irrigation Control</title>";
+    html += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
+    html += "<style>";
+    html += "body { font-family: Arial; text-align: center; margin: 50px; }";
+    html += ".button { padding: 15px 30px; font-size: 18px; margin: 10px; cursor: pointer; }";
+    html += ".on { background-color: #4CAF50; color: white; }";
+    html += ".off { background-color: #f44336; color: white; }";
+    html += ".status { font-size: 20px; margin: 20px; }";
+    html += "</style></head><body>";
+    html += "<h1>ESP32 Irrigation Control</h1>";
+    html += "<div class='status'>Motor Status: <span id='status'>OFF</span></div>";
+    html += "<div class='status'>LED Status: <span id='led'>OFF</span></div>";
+    html += "<button class='button on' onclick='turnOn()'>Motor ON</button>";
+    html += "<button class='button off' onclick='turnOff()'>Motor OFF</button>";
+    html += "<script>";
+    html += "function turnOn() {";
+    html += "fetch('/api/motor/on', {method: 'POST'})";
+    html += ".then(response => response.json())";
+    html += ".then(data => {";
+    html += "document.getElementById('status').innerText = 'ON';";
+    html += "document.getElementById('led').innerText = 'BLINKING';";
+    html += "});";
+    html += "}";
+    html += "function turnOff() {";
+    html += "fetch('/api/motor/off', {method: 'POST'})";
+    html += ".then(response => response.json())";
+    html += ".then(data => {";
+    html += "document.getElementById('status').innerText = 'OFF';";
+    html += "document.getElementById('led').innerText = 'OFF';";
+    html += "});";
+    html += "}";
+    html += "</script></body></html>";
+
+    server.send(200, "text/html", html);
+  });
+
+  // Main Motor ON endpoint
+  server.on("/api/mainmotor/on", HTTP_POST, []() {
+    Serial.println("🌐 HTTP Request: POST /api/mainmotor/on");
+    Serial.println("📄 Client IP: " + server.client().remoteIP().toString());
+    Serial.println("🔍 User-Agent: " + server.header("User-Agent"));
+
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    Serial.println("🔧 Main Motor ON request received");
+    mainMotorState = true;
+    mainMotorOnTime = millis(); // Start 3-second timer
+
+    // Force GPIO 2 HIGH with debugging
+    digitalWrite(MAIN_MOTOR_PIN, HIGH);
+    delay(10); // Small delay to ensure voltage stabilizes
+
+    // Verify the pin state
+    int pinState = digitalRead(MAIN_MOTOR_PIN);
+    Serial.println("🔴 Main Motor ON - GPIO " + String(MAIN_MOTOR_PIN) + " set to HIGH");
+    Serial.println("📊 GPIO " + String(MAIN_MOTOR_PIN) + " actual state: " + String(pinState == HIGH ? "HIGH (3.3V)" : "LOW (0V)"));
+
+    String response = "{\"status\":\"ok\",\"motor\":\"main\",\"motor_id\":0,\"led\":\"on\",\"duration\":3000}";
+    server.send(200, "application/json", response);
+  });
+
+  // Main Motor OFF endpoint
+  server.on("/api/mainmotor/off", HTTP_POST, []() {
+    Serial.println("🌐 HTTP Request: POST /api/mainmotor/off");
+    Serial.println("📄 Client IP: " + server.client().remoteIP().toString());
+
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    mainMotorState = false;
+    digitalWrite(MAIN_MOTOR_PIN, LOW); // Immediately turn main motor OFF
+
+    Serial.println("⚫ Main Motor OFF - GPIO " + String(MAIN_MOTOR_PIN) + " OFF");
+
+    String response = "{\"status\":\"ok\",\"motor\":\"main\",\"motor_id\":0,\"led\":\"off\"}";
+    server.send(200, "application/json", response);
+  });
+
+  // Individual Motor ON endpoint
+  server.on("/api/motor/on", HTTP_POST, []() {
+    Serial.println("🌐 HTTP Request: POST /api/motor/on");
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    // Get motor_id from query parameter (default to 1 if not provided)
+    int motorId = server.arg("motor_id").toInt();
+    if (motorId < 1 || motorId > NUM_MOTORS) {
+      motorId = 1; // Default to motor 1
+    }
+    int motorIndex = motorId - 1; // Convert to 0-based index
+
+    motorStates[motorIndex] = true;
+    motorOnTimes[motorIndex] = millis(); // Start 3-second timer
+    digitalWrite(MOTOR_PINS[motorIndex], HIGH); // Turn motor ON immediately
+
+    Serial.println("🔴 Motor " + String(motorId) + " ON - GPIO " + String(MOTOR_PINS[motorIndex]) + " ON for 3 seconds");
+
+    String response = "{\"status\":\"ok\",\"motor_id\":" + String(motorId) + ",\"motor\":\"on\",\"led\":\"on\",\"duration\":3000}";
+    server.send(200, "application/json", response);
+  });
+
+  // Motor OFF endpoint
+  server.on("/api/motor/off", HTTP_POST, []() {
+    Serial.println("🌐 HTTP Request: POST /api/motor/off");
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    // Get motor_id from query parameter (default to 1 if not provided)
+    int motorId = server.arg("motor_id").toInt();
+    if (motorId < 1 || motorId > NUM_MOTORS) {
+      motorId = 1; // Default to motor 1
+    }
+    int motorIndex = motorId - 1; // Convert to 0-based index
+
+    motorStates[motorIndex] = false;
+    digitalWrite(MOTOR_PINS[motorIndex], LOW); // Immediately turn motor OFF
+
+    Serial.println("⚫ Motor " + String(motorId) + " OFF - GPIO " + String(MOTOR_PINS[motorIndex]) + " OFF");
+
+    String response = "{\"status\":\"ok\",\"motor_id\":" + String(motorId) + ",\"motor\":\"off\",\"led\":\"off\"}";
+    server.send(200, "application/json", response);
+  });
+
+  // Motor status endpoint
+  server.on("/api/motor/status", HTTP_GET, []() {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    // Get motor_id from query parameter (default to 1 if not provided)
+    int motorId = server.arg("motor_id").toInt();
+    if (motorId < 1 || motorId > NUM_MOTORS) {
+      motorId = 1; // Default to motor 1
+    }
+    int motorIndex = motorId - 1; // Convert to 0-based index
+
+    String motorStatus = motorStates[motorIndex] ? "on" : "off";
+    String ledStatus = "off";
+    unsigned long timeRemaining = 0;
+
+    if (motorStates[motorIndex]) {
+      if (millis() - motorOnTimes[motorIndex] < LED_DURATION) {
+        ledStatus = "on";
+        timeRemaining = LED_DURATION - (millis() - motorOnTimes[motorIndex]);
+      } else {
+        ledStatus = "off";
+      }
+    }
+
+    String response = "{\"motor_id\":" + String(motorId) + ",\"motor\":\"" + motorStatus + "\",\"led\":\"" + ledStatus + "\",\"timeRemaining\":" + timeRemaining + "}";
+    server.send(200, "application/json", response);
+  });
+
+  // Moisture sensor endpoint
+  server.on("/api/moisture", HTTP_GET, []() {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    // Get sensor_id from query parameter (return all sensors if not provided)
+    int sensorId = server.arg("sensor_id").toInt();
+
+    if (sensorId >= 1 && sensorId <= NUM_SENSORS) {
+      // Return specific sensor data
+      int sensorIndex = sensorId - 1;
+      String response = "{\"sensor_id\":" + String(sensorId) + ",\"gpio\":" + String(MOISTURE_SENSOR_PINS[sensorIndex]) + ",\"moisture\":" + String(moisturePercents[sensorIndex]) + ",\"rawValue\":" + String(moistureValues[sensorIndex]) + ",\"unit\":\"%\"}";
+      server.send(200, "application/json", response);
+    } else {
+      // Return all sensors data
+      String response = "{\"sensors\":[";
+      for (int i = 0; i < NUM_SENSORS; i++) {
+        response += "{\"sensor_id\":" + String(i+1) + ",\"gpio\":" + String(MOISTURE_SENSOR_PINS[i]) + ",\"moisture\":" + String(moisturePercents[i]) + ",\"rawValue\":" + String(moistureValues[i]) + "}";
+        if (i < NUM_SENSORS - 1) response += ",";
+      }
+      response += "]}";
+      server.send(200, "application/json", response);
+    }
+  });
+
+  // System status endpoint
+  server.on("/api/system/status", HTTP_GET, []() {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    // Count active motors
+    int activeMotors = 0;
+    for (int i = 0; i < NUM_MOTORS; i++) {
+      if (motorStates[i]) activeMotors++;
+    }
+
+    // Calculate average moisture
+    int avgMoisture = 0;
+    for (int i = 0; i < NUM_SENSORS; i++) {
+      avgMoisture += moisturePercents[i];
+    }
+    avgMoisture = avgMoisture / NUM_SENSORS;
+
+    String json = "{";
+    json += "\"status\":\"ok\"";
+    json += ",\"mainMotor\":\"" + String(mainMotorState ? "on" : "off") + "\"";
+    json += ",\"mainMotorGpio\":" + String(MAIN_MOTOR_PIN);
+    json += ",\"totalMotors\":" + String(NUM_MOTORS);
+    json += ",\"activeMotors\":" + String(activeMotors);
+    json += ",\"totalSensors\":" + String(NUM_SENSORS);
+    json += ",\"avgMoisture\":" + String(avgMoisture);
+    json += ",\"uptime\":" + String(millis());
+    json += ",\"freeHeap\":" + String(ESP.getFreeHeap());
+    json += ",\"cpuFreq\":" + String(ESP.getCpuFreqMHz());
+    json += "}";
+    server.send(200, "application/json", json);
+  });
+
+  // Handle CORS preflight requests
+  server.on("/api/motor/on", HTTP_OPTIONS, []() {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+    server.send(200, "text/plain", "");
+  });
+
+  server.on("/api/motor/off", HTTP_OPTIONS, []() {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+    server.send(200, "text/plain", "");
+  });
+}
