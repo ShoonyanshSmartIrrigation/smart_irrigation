@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../Routes/app_Routes.dart';
+import '../services/settings_service.dart';
+import '../Widgets/build_header.dart';
 
 class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+
   @override
   _SettingsScreenState createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  final SettingsService _settingsService = SettingsService();
   int minMoisture = 30;
   int maxMoisture = 70;
   int timerMinutes = 5;
@@ -20,22 +24,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final settings = await _settingsService.loadSettings();
     setState(() {
-      minMoisture = prefs.getInt("min_moisture") ?? 30;
-      maxMoisture = prefs.getInt("max_moisture") ?? 70;
-      timerMinutes = prefs.getInt("timer_minutes") ?? 5;
-      esp32Ip = prefs.getString("esp_ip") ?? "Not Set";
+      minMoisture = settings["min_moisture"];
+      maxMoisture = settings["max_moisture"];
+      timerMinutes = settings["timer_minutes"];
+      esp32Ip = settings["esp_ip"];
     });
   }
 
   Future<void> _updateSetting(String key, dynamic value) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (value is int) {
-      await prefs.setInt(key, value);
-    } else if (value is String) {
-      await prefs.setString(key, value);
-    }
+    await _settingsService.updateSetting(key, value);
     _loadSettings();
   }
 
@@ -43,17 +42,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7F5),
-      appBar: AppBar(
-        title: const Text("Settings", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF2E7D32),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-      ),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const BuildHeader(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.settings, color: Colors.white, size: 30),
+                    SizedBox(height: 10),
+                    Text(
+                      "Settings",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             _buildSectionHeader("Irrigation Thresholds"),
             _buildSettingCard(
               icon: Icons.water_drop_outlined,
@@ -114,7 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: TextStyle(color: Colors.grey[500], fontSize: 12),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 100), // Extra space for bottom nav
           ],
         ),
       ),
@@ -283,7 +295,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7D32)),
             onPressed: () {
               String value = controller.text.trim();
-              if (_isValidIp(value)) {
+              if (_settingsService.isValidIp(value)) {
                 _updateSetting("esp_ip", value);
                 Navigator.pop(context);
               } else {
@@ -295,11 +307,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-  }
-
-  bool _isValidIp(String ip) {
-    final regex = RegExp(r'^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$');
-    return regex.hasMatch(ip);
   }
 
   void _showLogoutDialog() {
@@ -314,8 +321,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
             onPressed: () async {
-              SharedPreferences prefs = await SharedPreferences.getInstance();
-              await prefs.setBool('isLoggedIn', false);
+              await _settingsService.logout();
               Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (route) => false);
             },
             child: const Text("LOGOUT", style: TextStyle(color: Colors.white)),

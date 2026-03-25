@@ -1,10 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:multicast_dns/multicast_dns.dart';
-import 'package:network_info_plus/network_info_plus.dart';
+import '../services/esp32_config_service.dart';
 
 class Esp32ConfigScreen extends StatefulWidget {
   @override
@@ -12,6 +8,7 @@ class Esp32ConfigScreen extends StatefulWidget {
 }
 
 class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
+  final Esp32ConfigService _configService = Esp32ConfigService();
   String status = "Checking...";
   String result = "Verifying current status...";
   bool isLoading = false;
@@ -20,7 +17,6 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
   @override
   void initState() {
     super.initState();
-    // Check for existing connection before starting discovery
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkInitialStatus();
     });
@@ -31,33 +27,21 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
       isLoading = true;
     });
 
-    final prefs = await SharedPreferences.getInstance();
-    String? savedIp = prefs.getString("esp_ip");
-    int savedPort = prefs.getInt("esp_port") ?? 80;
-
-    if (savedIp != null && savedIp.isNotEmpty) {
-      bool isConnected = await _verifyAndSave(savedIp, savedPort, "Saved Settings");
-      if (isConnected) {
+    bool isConnected = await _configService.checkInitialStatus();
+    if (isConnected) {
+      if (mounted) {
         setState(() {
+          status = "Connected";
+          result = "✅ Device is connected!";
           isLoading = false;
         });
-        return; // Already connected, no need to search
       }
+      return;
     }
 
-    // If no saved IP or saved IP is unreachable, start auto discovery
     startAutoDiscovery();
   }
 
-  Future<void> saveData(String ip, int port) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString("esp_ip", ip);
-    await prefs.setInt("esp_port", port);
-  }
-
-  // ===============================
-  // AUTO DISCOVERY (mDNS + Scan)
-  // ===============================
   Future<void> startAutoDiscovery() async {
     setState(() {
       isLoading = true;
@@ -66,108 +50,21 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
       discoveredIp = null;
     });
 
-    // 1. Try mDNS first
-    bool found = await _discoverViaMDNS();
-    
-    // 2. Fallback to Subnet Scan if mDNS doesn't find it
-    if (!found && mounted) {
-      await _discoverViaIPScan();
-    }
+    String? ip = await _configService.startAutoDiscovery();
 
     if (mounted) {
       setState(() {
         isLoading = false;
-        if (status != "Connected") {
+        if (ip != null) {
+          status = "Connected";
+          result = "✅ Device is connected!";
+          discoveredIp = ip;
+        } else {
           status = "Not Found";
           result = "Could not find ESP32. Please ensure it's powered on and on the same Wi-Fi.";
         }
       });
     }
-  }
-
-  Future<bool> _discoverViaMDNS() async {
-    final MDnsClient client = MDnsClient();
-    try {
-      await client.start();
-      
-      // Look for HTTP services
-      await for (final PtrResourceRecord ptr in client.lookup<PtrResourceRecord>(
-          ResourceRecordQuery.serverPointer('_http._tcp.local'))) {
-        
-        await for (final SrvResourceRecord srv in client.lookup<SrvResourceRecord>(
-            ResourceRecordQuery.service(ptr.domainName))) {
-          
-          await for (final IPAddressResourceRecord ip in client.lookup<IPAddressResourceRecord>(
-              ResourceRecordQuery.addressIPv4(srv.target))) {
-            
-            String ipStr = ip.address.address;
-            int port = srv.port;
-            
-            if (await _verifyAndSave(ipStr, port, "mDNS")) {
-              client.stop();
-              return true;
-            }
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint("mDNS error: $e");
-    } finally {
-      client.stop();
-    }
-    return false;
-  }
-
-  Future<void> _discoverViaIPScan() async {
-    if (status == "Connected") return;
-
-    setState(() {
-      result = "mDNS failed. Scanning network subnet...";
-    });
-
-    try {
-      final info = NetworkInfo();
-      String? myIp = await info.getWifiIP();
-      
-      if (myIp == null || myIp.isEmpty) {
-        result = "❌ Wi-Fi IP not found. Are you connected to Wi-Fi?";
-        return;
-      }
-
-      String subnet = myIp.substring(0, myIp.lastIndexOf('.'));
-      List<Future<void>> scans = [];
-
-      // Scan common IP range
-      for (int i = 1; i <= 255; i++) {
-        scans.add(_verifyAndSave("$subnet.$i", 80, "Auto Scan"));
-      }
-
-      await Future.wait(scans);
-    } catch (e) {
-      debugPrint("Scan error: $e");
-    }
-  }
-
-  Future<bool> _verifyAndSave(String ip, int port, String method) async {
-    if (status == "Connected") return true;
-
-    try {
-      final res = await http.get(Uri.parse("http://$ip:$port/api/system/status"))
-          .timeout(const Duration(milliseconds: 1500));
-      
-      if (res.statusCode == 200 && status != "Connected") {
-        await saveData(ip, port);
-        if (mounted) {
-          setState(() {
-            status = "Connected";
-            result = "✅ Device is connected!";
-            discoveredIp = ip;
-          });
-        }
-        return true;
-      }
-    } catch (_) {}
-    return false;
   }
 
   @override

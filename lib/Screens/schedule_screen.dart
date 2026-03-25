@@ -1,6 +1,6 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/schedule_service.dart';
+import '../Widgets/build_header.dart';
 
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
@@ -10,6 +10,7 @@ class ScheduleScreen extends StatefulWidget {
 }
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
+  final ScheduleService _scheduleService = ScheduleService();
   List<WateringSchedule> schedules = [];
   bool isLoading = true;
 
@@ -20,37 +21,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Future<void> _loadSchedules() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? schedulesJson = prefs.getString('watering_schedules');
-
-    if (schedulesJson != null) {
-      final List<dynamic> decoded = jsonDecode(schedulesJson);
-      setState(() {
-        schedules = decoded.map((item) => WateringSchedule.fromJson(item)).toList();
-        isLoading = false;
-      });
-    } else {
-      setState(() {
-        schedules = [
-          WateringSchedule(
-            time: "06:30 AM",
-            title: "Morning Hydration",
-            frequency: "Daily",
-            duration: "15 mins",
-            isEnabled: true,
-            smartSkip: true,
-          ),
-        ];
-        isLoading = false;
-      });
-      _saveSchedules();
-    }
+    final loadedSchedules = await _scheduleService.loadSchedules();
+    setState(() {
+      schedules = loadedSchedules;
+      isLoading = false;
+    });
   }
 
   Future<void> _saveSchedules() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String encoded = jsonEncode(schedules.map((s) => s.toJson()).toList());
-    await prefs.setString('watering_schedules', encoded);
+    await _scheduleService.saveSchedules(schedules);
   }
 
   String _formatTimeOfDay(TimeOfDay tod) {
@@ -256,7 +235,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       backgroundColor: const Color(0xFFF4F7F5),
       body: Column(
         children: [
-          _buildHeader(),
+          _buildHeaderContent(),
           Expanded(
             child: isLoading
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF2E7D32)))
@@ -297,29 +276,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  Widget _buildHeader() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.only(top: 60, left: 30, right: 30, bottom: 40),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF2E7D32), Color(0xFF1B5E20)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(40),
-          bottomRight: Radius.circular(40),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 15,
-            offset: Offset(0, 5),
-          )
-        ],
-      ),
+  Widget _buildHeaderContent() {
+    return BuildHeader(
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -426,8 +386,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           color: Colors.blue.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Row(
-                          children: const [
+                        child: const Row(
+                          children: [
                             Icon(Icons.cloud_queue_rounded, size: 12, color: Colors.blueAccent),
                             SizedBox(width: 4),
                             Text("Smart Skip", style: TextStyle(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.bold)),
@@ -518,40 +478,4 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       ),
     );
   }
-}
-
-class WateringSchedule {
-  final String time;
-  final String title;
-  final String frequency;
-  final String duration;
-  bool isEnabled;
-  final bool smartSkip;
-
-  WateringSchedule({
-    required this.time,
-    required this.title,
-    required this.frequency,
-    required this.duration,
-    required this.isEnabled,
-    required this.smartSkip,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'time': time,
-        'title': title,
-        'frequency': frequency,
-        'duration': duration,
-        'isEnabled': isEnabled,
-        'smartSkip': smartSkip,
-      };
-
-  factory WateringSchedule.fromJson(Map<String, dynamic> json) => WateringSchedule(
-        time: json['time'],
-        title: json['title'],
-        frequency: json['frequency'],
-        duration: json['duration'],
-        isEnabled: json['isEnabled'],
-        smartSkip: json['smartSkip'],
-      );
 }
