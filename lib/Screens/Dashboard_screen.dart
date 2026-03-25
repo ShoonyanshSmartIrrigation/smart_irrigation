@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import '../services/dashboard_service.dart';
 import '../Widgets/build_header.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({Key? key}) : super(key: key);
+  final Function(int)? onTabRequested;
+  const DashboardScreen({super.key, this.onTabRequested});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -23,7 +25,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? moistureTimer;
   Timer? irrigationTimer;
   Timer? connectionCheckTimer;
-  int timerSeconds = 0;
+  int timerSeconds = 60; // Default to 1 minute
+  int _selectedMinutes = 1;
   StreamSubscription? connectivitySubscription;
 
   @override
@@ -84,16 +87,208 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void startTimer() {
-    setState(() => timerSeconds = 60); // Set to 1 minute (60 seconds)
+    if (timerSeconds == 0) {
+      setState(() => timerSeconds = _selectedMinutes * 60);
+    }
     irrigationTimer?.cancel();
     irrigationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (timerSeconds > 0) {
         if (mounted) setState(() => timerSeconds--);
       } else {
         timer.cancel();
+        // Check if motor is ON, then turn it OFF
+        if (mainMotor) {
+          _toggleMainPump(false);
+        }
         _playAlarm();
       }
     });
+  }
+
+  void _showTimerPicker() {
+    int tempMinutes = _selectedMinutes;
+    final FixedExtentScrollController scrollController = FixedExtentScrollController(initialItem: tempMinutes - 1);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              padding: const EdgeInsets.only(top: 20, bottom: 30),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(40),
+                  topRight: Radius.circular(40),
+                ),
+                boxShadow: [
+                  BoxShadow(color: Colors.black26, blurRadius: 20, spreadRadius: 5),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 50,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  const SizedBox(height: 25),
+                  const Text(
+                    "Set Irrigation Duration",
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1A1A1A),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    "Select how long you want to irrigate",
+                    style: TextStyle(color: Colors.grey, fontSize: 14),
+                  ),
+                  const SizedBox(height: 30),
+                  
+                  // Quick Selection Row
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [5, 10, 15, 30, 45, 60].map((mins) {
+                        bool isSelected = tempMinutes == mins;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 10),
+                          child: ChoiceChip(
+                            label: Text("$mins min"),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              if (selected) {
+                                setModalState(() {
+                                  tempMinutes = mins;
+                                  scrollController.animateToItem(
+                                    mins - 1,
+                                    duration: const Duration(milliseconds: 400),
+                                    curve: Curves.easeOutBack,
+                                  );
+                                });
+                                HapticFeedback.mediumImpact();
+                              }
+                            },
+                            selectedColor: const Color(0xFF2E7D32),
+                            backgroundColor: Colors.grey[100],
+                            labelStyle: TextStyle(
+                              color: isSelected ? Colors.white : Colors.black87,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            side: BorderSide(
+                              color: isSelected ? Colors.transparent : Colors.grey[300]!,
+                            ),
+                            showCheckmark: false,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Wheel Picker
+                  SizedBox(
+                    height: 200,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Container(
+                          height: 55,
+                          width: MediaQuery.of(context).size.width * 0.85,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F5E9).withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                        ),
+                        ListWheelScrollView.useDelegate(
+                          controller: scrollController,
+                          itemExtent: 55,
+                          perspective: 0.006,
+                          diameterRatio: 1.4,
+                          squeeze: 1.1,
+                          physics: const FixedExtentScrollPhysics(),
+                          useMagnifier: true,
+                          magnification: 1.3,
+                          overAndUnderCenterOpacity: 0.4,
+                          onSelectedItemChanged: (index) {
+                            HapticFeedback.selectionClick();
+                            setModalState(() {
+                              tempMinutes = index + 1;
+                            });
+                          },
+                          childDelegate: ListWheelChildBuilderDelegate(
+                            childCount: 120,
+                            builder: (context, index) {
+                              final isSelected = (index + 1) == tempMinutes;
+                              return Center(
+                                child: Text(
+                                  "${index + 1} minutes",
+                                  style: TextStyle(
+                                    fontSize: isSelected ? 26 : 20,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                    color: isSelected ? const Color(0xFF2E7D32) : Colors.grey[400],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 30),
+                  
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 60,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            _selectedMinutes = tempMinutes;
+                            if (irrigationTimer == null || !irrigationTimer!.isActive) {
+                              timerSeconds = _selectedMinutes * 60;
+                            }
+                          });
+                          Navigator.pop(context);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2E7D32),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        ),
+                        child: const Text(
+                          "CONFIRM DURATION",
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _playAlarm() {
@@ -114,7 +309,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text("Irrigation Complete"),
-        content: const Text("The irrigation timer has finished."),
+        content: const Text("The irrigation timer has finished and the motor has been turned off."),
         actions: [
           TextButton(
             onPressed: () {
@@ -240,7 +435,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Text(
             "WELCOME BACK",
             style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha: 0.7),
               fontSize: 13,
               fontWeight: FontWeight.w600,
               letterSpacing: 1.5,
@@ -265,9 +460,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.12),
+                  color: Colors.white.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -280,7 +475,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: (connectionStatus == "SYSTEM ONLINE" ? Colors.greenAccent : Colors.redAccent).withOpacity(0.5),
+                            color: (connectionStatus == "SYSTEM ONLINE" ? Colors.greenAccent : Colors.redAccent).withValues(alpha: 0.5),
                             blurRadius: 4,
                             spreadRadius: 1,
                           )
@@ -331,19 +526,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const Color(0xFFFFF3E0),
             const Color(0xFFE65100),
             subTitle: "Active Motors",
+            onTap: () {
+              if (widget.onTabRequested != null) {
+                widget.onTabRequested!(1); // Index 1 is Zones/PlantControl
+              }
+            },
           ),
         ),
       ],
     );
   }
 
-  Widget _buildInfoCard(String title, String value, IconData icon, Color bgColor, Color iconColor, {bool showProgress = false, double progressValue = 0, String? subTitle}) {
-    return Container(
+  Widget _buildInfoCard(String title, String value, IconData icon, Color bgColor, Color iconColor, {bool showProgress = false, double progressValue = 0, String? subTitle, VoidCallback? onTap}) {
+    Widget card = Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 15, offset: const Offset(0, 8))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -388,6 +588,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
     );
+
+    if (onTap != null) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: card,
+      );
+    }
+    return card;
   }
 
   Widget _buildMainControls() {
@@ -403,7 +612,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: _mainPumpError ? Colors.red.withOpacity(0.1) : Colors.black.withOpacity(0.04), 
+            color: _mainPumpError ? Colors.red.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.04), 
             blurRadius: 10, 
             offset: const Offset(0, 4)
           )
@@ -416,7 +625,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             mainMotor, 
             _mainPumpError ? Icons.wifi_off_rounded : Icons.power_settings_new_rounded, 
             (val) => _toggleMainPump(val),
-            _mainPumpError ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1),
+            _mainPumpError ? Colors.red.withValues(alpha: 0.1) : Colors.green.withValues(alpha: 0.1),
             _mainPumpError ? Colors.red : Colors.green,
             isError: _mainPumpError,
           ),
@@ -429,7 +638,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             autoMode, 
             Icons.auto_awesome_rounded, 
             (val) => setState(() => autoMode = val),
-            Colors.blue.withOpacity(0.1),
+            Colors.blue.withValues(alpha: 0.1),
             Colors.blue,
           ),
         ],
@@ -456,7 +665,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         trailing: Switch(
           value: value,
-          activeColor: Colors.white,
+          activeThumbColor: Colors.white,
           activeTrackColor: const Color(0xFF2E7D32),
           inactiveTrackColor: Colors.grey[300],
           onChanged: onChanged,
@@ -466,6 +675,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildTimerCard() {
+    bool isRunning = irrigationTimer?.isActive ?? false;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -479,42 +690,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("NEXT CYCLE", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                  SizedBox(height: 4),
-                  Text("Irrigation Timer", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                  const Text("NEXT CYCLE", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  Row(
+                    children: [
+                      const Text("Irrigation Timer", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      Visibility(
+                        visible: !isRunning,
+                        maintainSize: true,
+                        maintainAnimation: true,
+                        maintainState: true,
+                        child: IconButton(
+                          icon: const Icon(Icons.edit_calendar_rounded, color: Colors.green, size: 20),
+                          onPressed: _showTimerPicker,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
-              Icon(Icons.timer_outlined, color: Colors.white.withOpacity(0.2), size: 32),
+              Icon(Icons.timer_outlined, color: Colors.white.withValues(alpha: 0.2), size: 32),
             ],
           ),
-          const SizedBox(height: 30),
-          Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(getTimerText(), style: const TextStyle(color: Colors.white, fontSize: 64, fontWeight: FontWeight.bold, letterSpacing: 2)),
-                const SizedBox(width: 8),
-                const Text("min", style: TextStyle(color: Colors.grey, fontSize: 24, fontWeight: FontWeight.w500)),
-              ],
+          GestureDetector(
+            onTap: isRunning ? null : _showTimerPicker,
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(getTimerText(), style: const TextStyle(color: Colors.white, fontSize: 50, fontWeight: FontWeight.bold, letterSpacing: 2)),
+                  const SizedBox(width: 8),
+                  const Text("min", style: TextStyle(color: Colors.grey, fontSize: 24, fontWeight: FontWeight.w500)),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
-                child: _timerButton("START", const Color(0xFF2E7D32), startTimer),
+                child: _timerButton(isRunning ? "RUNNING" : "START", isRunning ? const Color(0xFF2E7D32).withValues(alpha: 0.5) : const Color(0xFF2E7D32), isRunning ? () {} : startTimer),
               ),
-              const SizedBox(width: 15),
+              const SizedBox(width: 12),
               Expanded(
                 child: _timerButton("STOP", const Color(0xFF332020), () {
                   irrigationTimer?.cancel();
                   FlutterRingtonePlayer().stop();
-                  setState(() => timerSeconds = 0);
+                  setState(() => timerSeconds = _selectedMinutes * 60);
                 }, textColor: Colors.redAccent),
               ),
             ],
@@ -546,7 +774,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,

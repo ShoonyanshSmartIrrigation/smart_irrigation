@@ -14,7 +14,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final SettingsService _settingsService = SettingsService();
   int minMoisture = 30;
   int maxMoisture = 70;
-  int timerMinutes = 5;
   String esp32Ip = "Not Set";
 
   @override
@@ -28,7 +27,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       minMoisture = settings["min_moisture"];
       maxMoisture = settings["max_moisture"];
-      timerMinutes = settings["timer_minutes"];
       esp32Ip = settings["esp_ip"];
     });
   }
@@ -81,12 +79,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             
             _buildSectionHeader("System Configuration"),
-            _buildSettingCard(
-              icon: Icons.timer_outlined,
-              title: "Motor Timer",
-              subtitle: "$timerMinutes minutes",
-              onTap: _showTimerDialog,
-            ),
             _buildSettingCard(
               icon: Icons.settings_ethernet,
               title: "ESP32 IP Address",
@@ -165,7 +157,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           leading: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 22),
@@ -204,71 +196,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Navigator.pop(context);
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Enter value between $min and $max")));
-              }
-            },
-            child: const Text("SAVE", style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showTimerDialog() {
-    List<int> options = [5, 10, 15, 30];
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-      builder: (_) => Container(
-        padding: const EdgeInsets.all(25),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("Select Motor Timer", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 15),
-            ...options.map((e) => ListTile(
-              title: Text("$e minutes"),
-              onTap: () {
-                _updateSetting("timer_minutes", e);
-                Navigator.pop(context);
-              },
-            )),
-            ListTile(
-              title: const Text("Custom"),
-              onTap: () {
-                Navigator.pop(context);
-                _showCustomTimerDialog();
-              },
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showCustomTimerDialog() {
-    TextEditingController controller = TextEditingController(text: timerMinutes.toString());
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Custom Timer"),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(hintText: "Enter minutes", border: OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7D32)),
-            onPressed: () {
-              int? value = int.tryParse(controller.text);
-              if (value != null && value >= 1 && value <= 120) {
-                _updateSetting("timer_minutes", value);
-                Navigator.pop(context);
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Enter 1–120 minutes")));
               }
             },
             child: const Text("SAVE", style: TextStyle(color: Colors.white)),

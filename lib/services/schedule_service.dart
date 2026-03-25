@@ -8,6 +8,7 @@ class WateringSchedule {
   final String duration;
   bool isEnabled;
   final bool smartSkip;
+  final List<int> selectedMotors; // Added this field
 
   WateringSchedule({
     required this.time,
@@ -16,6 +17,7 @@ class WateringSchedule {
     required this.duration,
     required this.isEnabled,
     required this.smartSkip,
+    required this.selectedMotors, // Added this field
   });
 
   Map<String, dynamic> toJson() => {
@@ -25,6 +27,7 @@ class WateringSchedule {
         'duration': duration,
         'isEnabled': isEnabled,
         'smartSkip': smartSkip,
+        'selectedMotors': selectedMotors, // Added this field
       };
 
   factory WateringSchedule.fromJson(Map<String, dynamic> json) => WateringSchedule(
@@ -34,6 +37,7 @@ class WateringSchedule {
         duration: json['duration'],
         isEnabled: json['isEnabled'],
         smartSkip: json['smartSkip'],
+        selectedMotors: List<int>.from(json['selectedMotors'] ?? []), // Added this field
       );
 }
 
@@ -60,6 +64,7 @@ class ScheduleService {
           duration: "15 mins",
           isEnabled: true,
           smartSkip: true,
+          selectedMotors: [1], // Default motor 1
         ),
       ];
       await saveSchedules(defaultSchedules);

@@ -16,13 +16,6 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   late int _currentIndex;
 
-  final List<Widget> _screens = [
-    DashboardScreen(),
-    PlantControlScreen(),
-    ScheduleScreen(),
-    SettingsScreen(),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -37,6 +30,13 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final List<Widget> _screens = [
+      DashboardScreen(onTabRequested: _onTap),
+      PlantControlScreen(),
+      ScheduleScreen(),
+      SettingsScreen(),
+    ];
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/schedule_service.dart';
+import '../services/plant_service.dart';
 import '../Widgets/build_header.dart';
 
 class ScheduleScreen extends StatefulWidget {
@@ -11,13 +13,71 @@ class ScheduleScreen extends StatefulWidget {
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
   final ScheduleService _scheduleService = ScheduleService();
+  final PlantService _plantService = PlantService();
   List<WateringSchedule> schedules = [];
   bool isLoading = true;
+  Timer? _checkTimer;
 
   @override
   void initState() {
     super.initState();
     _loadSchedules();
+    _startScheduleChecker();
+  }
+
+  @override
+  void dispose() {
+    _checkTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startScheduleChecker() {
+    _checkTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      _checkAndRunSchedules();
+    });
+  }
+
+  void _checkAndRunSchedules() {
+    final now = TimeOfDay.now();
+    final nowStr = _formatTimeOfDay(now);
+
+    for (var schedule in schedules) {
+      if (schedule.isEnabled && schedule.time == nowStr) {
+        _runSchedule(schedule);
+      }
+    }
+  }
+
+  Future<void> _runSchedule(WateringSchedule schedule) async {
+    // 1. Turn ON the selected motors
+    for (int motorId in schedule.selectedMotors) {
+      await _plantService.togglePlantMotor(motorId, true);
+    }
+    if (mounted) setState(() {});
+
+    // 2. Wait for the duration
+    int durationMinutes = int.tryParse(schedule.duration.split(' ')[0]) ?? 10;
+    
+    Timer(Duration(minutes: durationMinutes), () async {
+      // 3. Turn OFF the selected motors after duration is complete
+      for (int motorId in schedule.selectedMotors) {
+        await _plantService.togglePlantMotor(motorId, false);
+      }
+      if (mounted) setState(() {});
+      
+      _showCompletionNotification(schedule);
+    });
+  }
+
+  void _showCompletionNotification(WateringSchedule schedule) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Schedule '${schedule.title}' completed. Motors turned off."),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 5),
+      ),
+    );
   }
 
   Future<void> _loadSchedules() async {
@@ -56,12 +116,18 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
+  String _truncateText(String text, int maxLength) {
+    if (text.length <= maxLength) return text;
+    return "${text.substring(0, maxLength)}..";
+  }
+
   void _showScheduleSheet({WateringSchedule? schedule, int? index}) {
     String title = schedule?.title ?? "";
     String frequency = schedule?.frequency ?? "Daily";
     String duration = schedule?.duration ?? "10 mins";
     TimeOfDay selectedTime = schedule != null ? _parseTimeOfDay(schedule.time) : TimeOfDay.now();
     bool smartSkip = schedule?.smartSkip ?? true;
+    List<int> selectedMotors = schedule != null ? List.from(schedule.selectedMotors) : [1];
 
     showModalBottomSheet(
       context: context,
@@ -143,6 +209,54 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   ),
                 ),
                 const Divider(),
+                const SizedBox(height: 10),
+                const Text("Select Motors", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: List.generate(8, (i) {
+                    int motorNum = i + 1;
+                    bool isSelected = selectedMotors.contains(motorNum);
+                    return GestureDetector(
+                      onTap: () {
+                        setModalState(() {
+                          if (isSelected) {
+                            if (selectedMotors.length > 1) {
+                              selectedMotors.remove(motorNum);
+                            }
+                          } else {
+                            selectedMotors.add(motorNum);
+                            selectedMotors.sort();
+                          }
+                        });
+                      },
+                      child: Container(
+                        width: 45,
+                        height: 45,
+                        decoration: BoxDecoration(
+                          color: isSelected ? const Color(0xFF2E7D32) : Colors.grey[200],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isSelected ? const Color(0xFF2E7D32) : Colors.grey[300]!,
+                            width: 1,
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            "$motorNum",
+                            style: TextStyle(
+                              color: isSelected ? Colors.white : Colors.black87,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 20),
+                const Divider(),
                 Row(
                   children: [
                     Expanded(
@@ -193,6 +307,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           duration: duration,
                           isEnabled: schedule?.isEnabled ?? true,
                           smartSkip: smartSkip,
+                          selectedMotors: selectedMotors,
                         );
 
                         if (index == null) {
@@ -289,7 +404,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
@@ -330,7 +445,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 15,
             offset: const Offset(0, 8),
           )
@@ -371,7 +486,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 Row(
                   children: [
                     Text(
-                      schedule.title,
+                      _truncateText(schedule.title, 20),
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -383,7 +498,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
+                          color: Colors.blue.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Row(
@@ -398,11 +513,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   ],
                 ),
                 const SizedBox(height: 15),
-                Row(
+                Wrap(
+                  spacing: 15,
+                  runSpacing: 10,
                   children: [
                     _buildInfoBadge(Icons.calendar_today_rounded, schedule.frequency),
-                    const SizedBox(width: 15),
                     _buildInfoBadge(Icons.timer_outlined, schedule.duration),
+                    _buildInfoBadge(Icons.developer_board, "Motors: ${schedule.selectedMotors.join(', ')}"),
                   ],
                 ),
               ],
@@ -416,7 +533,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 bottomLeft: Radius.circular(24),
                 bottomRight: Radius.circular(24),
               ),
-              border: Border(top: BorderSide(color: Colors.grey.withOpacity(0.1))),
+              border: Border(top: BorderSide(color: Colors.grey.withValues(alpha: 0.1))),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -463,6 +580,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 14, color: Colors.grey[600]),
           const SizedBox(width: 6),
