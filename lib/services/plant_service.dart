@@ -42,6 +42,24 @@ class PlantService {
     return await _dataManager.togglePlantMotorApi(id, isOn);
   }
 
+  Future<bool> toggleAllMotors(bool isOn) async {
+    final prefs = await SharedPreferences.getInstance();
+    String? ip = prefs.getString("esp_ip");
+    int port = prefs.getInt("esp_port") ?? 80;
+
+    if (ip == null || ip.isEmpty) return false;
+
+    String url = "http://$ip:$port${isOn ? "/api/all/on" : "/api/all/off"}";
+    try {
+      final response = await http.post(Uri.parse(url)).timeout(const Duration(seconds: 3));
+      if (response.statusCode == 200) {
+        _dataManager.updateAllMotorsLocally(isOn);
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
   List<Plant> getPlants() {
     return _dataManager.plants;
   }

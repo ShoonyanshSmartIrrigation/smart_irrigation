@@ -29,6 +29,10 @@ class DashboardService {
     return await _esp32Service.toggleMainMotor(value);
   }
 
+  Future<bool> toggleAllMotors(bool value) async {
+    return await _esp32Service.toggleAllMotors(value);
+  }
+
   Stream<List<ConnectivityResult>> get connectivityStream => Connectivity().onConnectivityChanged;
 
   DataManager get dataManager => _dataManager;

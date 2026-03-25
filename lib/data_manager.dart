@@ -79,6 +79,36 @@ class DataManager {
     return false;
   }
 
+  // Master Control for All Motors
+  Future<bool> toggleAllMotorsApi(bool isOn) async {
+    final prefs = await SharedPreferences.getInstance();
+    String? ip = prefs.getString("esp_ip");
+    int port = prefs.getInt("esp_port") ?? 80;
+
+    if (ip == null || ip.isEmpty) return false;
+
+    String url = "http://$ip:$port${isOn ? "/api/all/on" : "/api/all/off"}";
+    try {
+      final response = await http.post(Uri.parse(url))
+          .timeout(const Duration(seconds: 3));
+      
+      if (response.statusCode == 200) {
+        updateAllMotorsLocally(isOn);
+        return true;
+      }
+    } catch (e) {
+      print("DataManager: Master Control Error -> $e");
+    }
+    return false;
+  }
+
+  // New method to update all motors locally
+  void updateAllMotorsLocally(bool isOn) {
+    for (var plant in plants) {
+      plant.isMotorOn = isOn;
+    }
+  }
+
   // Control Individual Plant Motor on ESP32
   Future<bool> togglePlantMotorApi(int id, bool isOn) async {
     final prefs = await SharedPreferences.getInstance();

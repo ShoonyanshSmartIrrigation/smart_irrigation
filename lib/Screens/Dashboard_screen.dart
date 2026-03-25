@@ -171,6 +171,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
+  String _formatDisplayName(String name) {
+    if (name.isEmpty) return "User";
+    
+    // Capitalize first letter and handle rest
+    String formatted = name[0].toUpperCase() + name.substring(1);
+    
+    // Limit to 8 characters (as requested)
+    if (formatted.length > 8) {
+      return "${formatted.substring(0, 8)}..";
+    }
+    return formatted;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -189,7 +202,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   _buildHeaderContent(),
                   Positioned(
-                    bottom: -80,
+                    bottom: -90,
                     left: 20,
                     right: 20,
                     child: _buildStatGrid(),
@@ -218,6 +231,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildHeaderContent() {
+    String displayName = _formatDisplayName(userName);
+
     return BuildHeader(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,56 +246,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
               letterSpacing: 1.5,
             ),
           ),
-          Text(
-            userName,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 30,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 15),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(25),
-              border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.wifi_rounded, color: Colors.white, size: 16),
-                const SizedBox(width: 8),
-                Text(
-                  connectionStatus,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  displayName,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
-                    letterSpacing: 0.8,
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.5,
                   ),
+                  maxLines: 1,
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    color: connectionStatus == "SYSTEM ONLINE" ? Colors.greenAccent : Colors.redAccent,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: (connectionStatus == "SYSTEM ONLINE" ? Colors.greenAccent : Colors.redAccent).withOpacity(0.5),
-                        blurRadius: 6,
-                        spreadRadius: 2,
-                      )
-                    ],
-                  ),
-                )
-              ],
-            ),
-          )
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: connectionStatus == "SYSTEM ONLINE" ? Colors.greenAccent : Colors.redAccent,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: (connectionStatus == "SYSTEM ONLINE" ? Colors.greenAccent : Colors.redAccent).withOpacity(0.5),
+                            blurRadius: 4,
+                            spreadRadius: 1,
+                          )
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      connectionStatus,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 10,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
         ],
       ),
     );

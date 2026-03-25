@@ -15,6 +15,8 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
   final PlantService _plantService = PlantService();
   Timer? syncTimer;
   bool isSyncing = false;
+  bool isTogglingAll = false;
+  bool _allMotorsError = false;
 
   // Track which plants have connection errors
   final Map<int, bool> _plantConnectionErrors = {};
@@ -72,6 +74,34 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
     }
   }
 
+  Future<void> _toggleAllMotors(bool value) async {
+    setState(() => isTogglingAll = true);
+    bool success = await _plantService.toggleAllMotors(value);
+    
+    if (mounted) {
+      if (success) {
+        setState(() {
+          isTogglingAll = false;
+          _allMotorsError = false;
+        });
+      } else {
+        setState(() {
+          isTogglingAll = false;
+          _allMotorsError = true;
+        });
+        
+        // Clear error state after 3 seconds
+        Timer(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              _allMotorsError = false;
+            });
+          }
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -84,7 +114,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
       body: Column(
         children: [
           _buildStatsHeader(),
-          const SizedBox(height: 100), // Space for overlapping card
+          const SizedBox(height: 100), // Adjusted space for overlapping card
           Expanded(
             child: GridView.builder(
               padding: const EdgeInsets.all(15),
@@ -107,6 +137,8 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
   }
 
   Widget _buildStatsHeader() {
+    bool isAnyMotorOn = _plantService.getActiveMotors() > 0;
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -121,7 +153,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                     "Plant Control",
                     style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
                   ),
-                  if (isSyncing)
+                  if (isSyncing || isTogglingAll)
                     const SizedBox(
                       width: 20,
                       height: 20,
@@ -138,7 +170,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
           ),
         ),
         Positioned(
-          bottom: -80,
+          bottom: -100, // Adjusted for smaller card
           left: 20,
           right: 20,
           child: Card(
@@ -158,23 +190,35 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                       _statItem("ACTIVE", _plantService.getActiveMotors().toString(), Icons.water_drop_rounded),
                     ],
                   ),
-                  const SizedBox(height: 15),
+                  const Divider(height: 30),
+                  // Master Control Row
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text("Average Moisture", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
-                      Text("${_plantService.getAvgMoisture()}%", style: const TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold, fontSize: 14)),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "MASTER SWITCH",
+                            style: TextStyle(
+                              color: _allMotorsError ? Colors.red : Colors.black87,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          Text(
+                            _allMotorsError ? "CONNECTION FAILED" : (isAnyMotorOn ? "Stop All Motors" : "Start All Motors"),
+                            style: TextStyle(color: Colors.grey, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                      Switch.adaptive(
+                        value: isAnyMotorOn,
+                        activeColor: const Color(0xFF2E7D32),
+                        onChanged: isTogglingAll ? null : (val) => _toggleAllMotors(val),
+                      ),
                     ],
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: LinearProgressIndicator(
-                      value: (_plantService.getAvgMoisture() / 100).clamp(0.0, 1.0),
-                      backgroundColor: Colors.grey[200],
-                      color: const Color(0xFF2E7D32),
-                      minHeight: 8,
-                    ),
                   ),
                 ],
               ),
@@ -240,7 +284,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                 Switch.adaptive(
                   value: plant.isMotorOn,
                   activeColor: const Color(0xFF2E7D32),
-                  onChanged: (_) => togglePlantMotor(plant),
+                  onChanged: isTogglingAll ? null : (_) => togglePlantMotor(plant),
                 ),
                 Text(
                   hasError ? "OFFLINE" : (plant.isMotorOn ? "ACTIVE" : "INACTIVE"),
