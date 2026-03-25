@@ -55,18 +55,27 @@ class DataManager {
     String? ip = prefs.getString("esp_ip");
     int port = prefs.getInt("esp_port") ?? 80;
 
-    if (ip == null || ip.isEmpty) return false;
+    if (ip == null || ip.isEmpty) {
+      print("DataManager: No IP configured for ESP32");
+      return false;
+    }
 
-    String endpoint = isOn ? "/api/mainmotor/on" : "/api/mainmotor/off";
+    String url = "http://$ip:$port${isOn ? "/api/mainmotor/on" : "/api/mainmotor/off"}";
+    print("DataManager: Sending Request -> POST $url");
+
     try {
-      final response = await http.post(Uri.parse("http://$ip:$port$endpoint"))
+      final response = await http.post(Uri.parse(url))
           .timeout(const Duration(seconds: 3));
+      
+      print("DataManager: Response Received -> Status: ${response.statusCode}, Body: ${response.body}");
       
       if (response.statusCode == 200) {
         mainMotorOn = isOn;
         return true;
       }
-    } catch (_) {}
+    } catch (e) {
+      print("DataManager: Error during request -> $e");
+    }
     return false;
   }
 
@@ -78,9 +87,9 @@ class DataManager {
 
     if (ip == null || ip.isEmpty) return false;
 
-    String endpoint = isOn ? "/api/motor/on" : "/api/motor/off";
+    String url = "http://$ip:$port${isOn ? "/api/motor/on" : "/api/motor/off"}?motor_id=$id";
     try {
-      final response = await http.post(Uri.parse("http://$ip:$port$endpoint?motor_id=$id"))
+      final response = await http.post(Uri.parse(url))
           .timeout(const Duration(seconds: 3));
       
       if (response.statusCode == 200) {

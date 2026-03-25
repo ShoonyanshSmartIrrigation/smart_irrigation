@@ -2,11 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import '../data_manager.dart';
 
 class DashboardScreen extends StatefulWidget {
+  const DashboardScreen({Key? key}) : super(key: key);
+
   @override
-  _DashboardScreenState createState() => _DashboardScreenState();
+  State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
@@ -33,17 +36,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _loadUserData() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      userName = prefs.getString('userName') ?? "User";
-    });
+    if (mounted) {
+      setState(() {
+        userName = prefs.getString('userName') ?? "Farmer James";
+      });
+    }
   }
 
   void _setupConnectivityListener() {
     connectivitySubscription = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
       if (results.contains(ConnectivityResult.none)) {
-        setState(() {
-          connectionStatus = "No Network";
-        });
+        if (mounted) {
+          setState(() {
+            connectionStatus = "No Network";
+          });
+        }
       } else {
         _checkEspConnection();
       }
@@ -51,7 +58,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _startPeriodicConnectionCheck() {
-    connectionCheckTimer = Timer.periodic(Duration(seconds: 10), (timer) {
+    connectionCheckTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       _checkEspConnection();
     });
   }
@@ -60,7 +67,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     bool isConnected = await dataManager.checkConnection();
     if (mounted) {
       setState(() {
-        connectionStatus = isConnected ? "System Online" : "Disconnected";
+        connectionStatus = isConnected ? "SYSTEM ONLINE" : "DISCONNECTED";
       });
     }
   }
@@ -68,27 +75,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _logout() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.clear();
-    Navigator.pushReplacementNamed(context, '/login');
+    if (mounted) {
+      Navigator.pushReplacementNamed(context, '/login');
+    }
   }
 
   void startMoistureSimulation() {
-    moistureTimer = Timer.periodic(Duration(seconds: 3), (timer) {
-      setState(() {
-        dataManager.simulateMoisture();
-      });
+    moistureTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (mounted) {
+        setState(() {
+          dataManager.simulateMoisture();
+        });
+      }
     });
   }
 
   void startTimer() {
-    setState(() => timerSeconds = 300);
+    setState(() => timerSeconds = 60); // Set to 1 minute (60 seconds)
     irrigationTimer?.cancel();
-    irrigationTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+    irrigationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (timerSeconds > 0) {
-        setState(() => timerSeconds--);
+        if (mounted) setState(() => timerSeconds--);
       } else {
         timer.cancel();
+        _playAlarm();
       }
     });
+  }
+
+  void _playAlarm() {
+    // Try playing a basic notification sound if alarm fails
+    try {
+      FlutterRingtonePlayer().play(
+        fromAsset: "assets/alarm.mp3", // Fallback to asset if you have one
+        android: AndroidSounds.alarm,
+        ios: IosSounds.alarm,
+        looping: true,
+        volume: 1.0,
+        asAlarm: true,
+      );
+    } catch (e) {
+      // If the above fails, try the simplest method
+      FlutterRingtonePlayer().playNotification();
+    }
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text("Irrigation Complete"),
+        content: const Text("The irrigation timer has finished."),
+        actions: [
+          TextButton(
+            onPressed: () {
+              FlutterRingtonePlayer().stop();
+              Navigator.pop(context);
+            },
+            child: const Text("OK"),
+          ),
+        ],
+      ),
+    );
   }
 
   String getTimerText() {
@@ -100,23 +147,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _toggleMainPump(bool value) async {
     bool success = await dataManager.toggleMainMotor(value);
     
-    if (success) {
-      setState(() {
-        mainMotor = value;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Pump turned ${value ? 'ON' : 'OFF'}"),
-          duration: Duration(seconds: 1),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Failed to control pump. Check connection."),
-          backgroundColor: Colors.red,
-        ),
-      );
+    if (mounted) {
+      if (success) {
+        setState(() {
+          mainMotor = value;
+        });
+      } else {
+        setState(() {
+          mainMotor = value;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Error: No response from ESP32. Check IP and Wi-Fi."),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -126,36 +172,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
     irrigationTimer?.cancel();
     connectionCheckTimer?.cancel();
     connectivitySubscription?.cancel();
+    FlutterRingtonePlayer().stop();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFFF4F7F5),
+      backgroundColor: const Color(0xFFF4F7F5),
       body: RefreshIndicator(
         onRefresh: () async {
           _loadUserData();
           await _checkEspConnection();
         },
         child: SingleChildScrollView(
-          physics: AlwaysScrollableScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             children: [
-              _buildHeader(),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  _buildHeader(),
+                  Positioned(
+                    bottom: -100,
+                    left: 20,
+                    right: 20,
+                    child: _buildStatGrid(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 120), // Space for the overlapping stat grid
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   children: [
-                    SizedBox(height: 20),
-                    _buildStatGrid(),
-                    SizedBox(height: 20),
                     _buildMainControls(),
-                    SizedBox(height: 20),
+                    const SizedBox(height: 20),
                     _buildTimerCard(),
-                    SizedBox(height: 20),
-                    _buildQuickActions(),
-                    SizedBox(height: 30),
+                    const SizedBox(height: 20),
+                    _buildWeatherCard(),
+                    const SizedBox(height: 30),
                   ],
                 ),
               ),
@@ -168,57 +224,85 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildHeader() {
     return Container(
-      padding: EdgeInsets.only(top: 60, left: 25, right: 25, bottom: 30),
-      decoration: BoxDecoration(
+      width: double.infinity,
+      padding: const EdgeInsets.only(top: 50, left: 30, right: 30, bottom: 70),
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFF2E7D32), Color(0xFF1B5E20)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(32),
-          bottomRight: Radius.circular(32),
+          bottomLeft: Radius.circular(40),
+          bottomRight: Radius.circular(40),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 15,
+            offset: Offset(0, 5),
+          )
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Welcome Back,", style: TextStyle(color: Colors.white70, fontSize: 16)),
-                  Text(userName, style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                ],
-              ),
-              CircleAvatar(
-                backgroundColor: Colors.white24,
-                child: IconButton(
-                  icon: Icon(Icons.logout, color: Colors.white, size: 20),
-                  onPressed: _logout,
-                ),
-              )
-            ],
+          Text(
+            "WELCOME BACK",
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.7),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.5,
+            ),
           ),
-          SizedBox(height: 20),
+          Text(
+            userName,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 30,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 20),
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white12,
-              borderRadius: BorderRadius.circular(12),
+              color: Colors.white.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(25),
+              border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  connectionStatus == "System Online" ? Icons.wifi : Icons.wifi_off, 
-                  color: connectionStatus == "System Online" ? Colors.greenAccent : Colors.redAccent, 
-                  size: 16
+                const Icon(Icons.wifi_rounded, color: Colors.white, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  connectionStatus,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                    letterSpacing: 0.8,
+                  ),
                 ),
-                SizedBox(width: 8),
-                Text(connectionStatus, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                const SizedBox(width: 8),
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: connectionStatus == "SYSTEM ONLINE" ? Colors.greenAccent : Colors.redAccent,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: (connectionStatus == "SYSTEM ONLINE" ? Colors.greenAccent : Colors.redAccent).withOpacity(0.5),
+                        blurRadius: 6,
+                        spreadRadius: 2,
+                      )
+                    ],
+                  ),
+                )
               ],
             ),
           )
@@ -232,48 +316,76 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         Expanded(
           child: _buildInfoCard(
-            "Soil Moisture",
+            "MOISTURE",
             "${dataManager.avgMoisture}%",
-            Icons.water_drop,
-            Colors.blueAccent,
-            progress: dataManager.avgMoisture / 100,
+            Icons.water_drop_rounded,
+            const Color(0xFFE3F2FD),
+            const Color(0xFF1976D2),
+            showProgress: true,
+            progressValue: dataManager.avgMoisture / 100,
           ),
         ),
-        SizedBox(width: 15),
+        const SizedBox(width: 15),
         Expanded(
           child: _buildInfoCard(
-            "Active Motors",
-            "${dataManager.activeMotors} / ${dataManager.totalMotors}",
-            Icons.settings_input_component,
-            Colors.orangeAccent,
+            "HARDWARE",
+            "${dataManager.activeMotors}/${dataManager.totalMotors}",
+            Icons.developer_board,
+            const Color(0xFFFFF3E0),
+            const Color(0xFFE65100),
+            subTitle: "Active Motors",
           ),
         ),
       ],
     );
   }
 
-  Widget _buildInfoCard(String title, String value, IconData icon, Color color, {double? progress}) {
+  Widget _buildInfoCard(String title, String value, IconData icon, Color bgColor, Color iconColor, {bool showProgress = false, double progressValue = 0, String? subTitle}) {
     return Container(
-      padding: EdgeInsets.all(20),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: Offset(0, 5))],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 28),
-          SizedBox(height: 15),
-          Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
-          Text(title, style: TextStyle(color: Colors.black54, fontSize: 14)),
-          if (progress != null) ...[
-            SizedBox(height: 10),
-            LinearProgressIndicator(
-              value: progress,
-              backgroundColor: color.withOpacity(0.1),
-              color: color,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
+                child: Icon(icon, color: iconColor, size: 22),
+              ),
+              Text(title, style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(value.split('/').first, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.black87)),
+              if (value.contains('/')) ...[
+                Text("/${value.split('/').last}", style: const TextStyle(fontSize: 18, color: Colors.grey, fontWeight: FontWeight.w500)),
+              ] else if (value.contains('%')) ...[
+                 const Text("%", style: TextStyle(fontSize: 18, color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+              ]
+            ],
+          ),
+          if (subTitle != null) Text(subTitle, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          if (showProgress) ...[
+            const SizedBox(height: 12),
+            ClipRRect(
               borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: progressValue,
+                backgroundColor: Colors.grey[200],
+                color: Colors.blueAccent,
+                minHeight: 6,
+              ),
             )
           ]
         ],
@@ -283,37 +395,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildMainControls() {
     return Container(
-      padding: EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         children: [
-          _buildToggleRow("Main Water Pump", mainMotor, Icons.power_settings_new, (val) {
-            _toggleMainPump(val);
-          }),
-          Divider(indent: 50),
-          _buildToggleRow("Automatic Mode", autoMode, Icons.auto_fix_high, (val) {
-            setState(() => autoMode = val);
-          }),
+          _buildToggleRow(
+            "Main Water Pump", 
+            mainMotor, 
+            Icons.power_settings_new_rounded, 
+            (val) => _toggleMainPump(val),
+            Colors.green.withOpacity(0.1),
+            Colors.green,
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: Divider(height: 1),
+          ),
+          _buildToggleRow(
+            "Automatic Mode", 
+            autoMode, 
+            Icons.auto_awesome_rounded, 
+            (val) => setState(() => autoMode = val),
+            Colors.blue.withOpacity(0.1),
+            Colors.blue,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildToggleRow(String title, bool value, IconData icon, Function(bool) onChanged) {
-    return ListTile(
-      leading: Container(
-        padding: EdgeInsets.all(8),
-        decoration: BoxDecoration(color: value ? Color(0xFFE8F5E9) : Colors.grey[100], borderRadius: BorderRadius.circular(12)),
-        child: Icon(icon, color: value ? Color(0xFF2E7D32) : Colors.grey),
-      ),
-      title: Text(title, style: TextStyle(fontWeight: FontWeight.w600)),
-      trailing: Switch.adaptive(
-        value: value,
-        activeColor: Color(0xFF2E7D32),
-        onChanged: onChanged,
+  Widget _buildToggleRow(String title, bool value, IconData icon, Function(bool) onChanged, Color iconBg, Color iconColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(12)),
+          child: Icon(icon, color: iconColor, size: 24),
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        trailing: Switch(
+          value: value,
+          activeColor: Colors.white,
+          activeTrackColor: const Color(0xFF2E7D32),
+          inactiveTrackColor: Colors.grey[300],
+          onChanged: onChanged,
+        ),
       ),
     );
   }
@@ -321,26 +452,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildTimerCard() {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(24),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(24),
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(30),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("Irrigation Timer", style: TextStyle(color: Colors.white70, fontSize: 16)),
-          SizedBox(height: 10),
-          Text(getTimerText(), style: TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.bold, letterSpacing: 2)),
-          SizedBox(height: 20),
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _timerButton("START", Colors.green, startTimer),
-              SizedBox(width: 15),
-              _timerButton("STOP", Colors.redAccent, () {
-                irrigationTimer?.cancel();
-                setState(() => timerSeconds = 0);
-              }),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("NEXT CYCLE", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  SizedBox(height: 4),
+                  Text("Irrigation Timer", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              Icon(Icons.timer_outlined, color: Colors.white.withOpacity(0.2), size: 32),
+            ],
+          ),
+          const SizedBox(height: 30),
+          Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(getTimerText(), style: const TextStyle(color: Colors.white, fontSize: 64, fontWeight: FontWeight.bold, letterSpacing: 2)),
+                const SizedBox(width: 8),
+                const Text("min", style: TextStyle(color: Colors.grey, fontSize: 24, fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 30),
+          Row(
+            children: [
+              Expanded(
+                child: _timerButton("START", const Color(0xFF2E7D32), startTimer),
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: _timerButton("STOP", const Color(0xFF332020), () {
+                  irrigationTimer?.cancel();
+                  FlutterRingtonePlayer().stop();
+                  setState(() => timerSeconds = 0);
+                }, textColor: Colors.redAccent),
+              ),
             ],
           )
         ],
@@ -348,59 +508,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _timerButton(String label, Color color, VoidCallback onTap) {
-    return ElevatedButton(
-      onPressed: onTap,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        padding: EdgeInsets.symmetric(horizontal: 25, vertical: 12),
+  Widget _timerButton(String label, Color color, VoidCallback onTap, {Color textColor = Colors.white}) {
+    return SizedBox(
+      height: 55,
+      child: ElevatedButton(
+        onPressed: onTap,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: textColor,
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+        ),
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1)),
       ),
-      child: Text(label, style: TextStyle(fontWeight: FontWeight.bold)),
     );
   }
 
-  Widget _buildQuickActions() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
-      children: [
-        _quickActionIcon(Icons.build_circle_outlined, "Maint.", '/maintenance'),
-        _quickActionIcon(Icons.history, "Logs", null),
-        _quickActionIcon(Icons.grass, "Plants", '/plant'),
-        _quickActionIcon(Icons.settings_outlined, "Config", '/settings'),
-      ],
-    );
-  }
-
-  Widget _quickActionIcon(IconData icon, String label, String? route) {
-    return GestureDetector(
-      onTap: () async {
-        if (route != null) {
-          await Navigator.pushNamed(context, route);
-          setState(() {}); // Refresh data when returning from other screens
-          _checkEspConnection(); // Refresh connection status
-        }
-      },
-      child: Column(
+  Widget _buildWeatherCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(15),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: Colors.black87),
+          const Icon(Icons.wb_cloudy_rounded, color: Color(0xFF1976D2), size: 40),
+          const SizedBox(width: 15),
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Partly Cloudy", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text("Precipitation expected: 12%", style: TextStyle(color: Colors.grey, fontSize: 12)),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.black54,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          const Spacer(),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Text("24°C", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+              Text("SOIL TEMP", style: TextStyle(color: Colors.grey.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold)),
+            ],
+          )
         ],
       ),
     );

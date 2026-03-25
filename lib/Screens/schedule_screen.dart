@@ -1,0 +1,557 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class ScheduleScreen extends StatefulWidget {
+  const ScheduleScreen({super.key});
+
+  @override
+  State<ScheduleScreen> createState() => _ScheduleScreenState();
+}
+
+class _ScheduleScreenState extends State<ScheduleScreen> {
+  List<WateringSchedule> schedules = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSchedules();
+  }
+
+  Future<void> _loadSchedules() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? schedulesJson = prefs.getString('watering_schedules');
+
+    if (schedulesJson != null) {
+      final List<dynamic> decoded = jsonDecode(schedulesJson);
+      setState(() {
+        schedules = decoded.map((item) => WateringSchedule.fromJson(item)).toList();
+        isLoading = false;
+      });
+    } else {
+      setState(() {
+        schedules = [
+          WateringSchedule(
+            time: "06:30 AM",
+            title: "Morning Hydration",
+            frequency: "Daily",
+            duration: "15 mins",
+            isEnabled: true,
+            smartSkip: true,
+          ),
+        ];
+        isLoading = false;
+      });
+      _saveSchedules();
+    }
+  }
+
+  Future<void> _saveSchedules() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String encoded = jsonEncode(schedules.map((s) => s.toJson()).toList());
+    await prefs.setString('watering_schedules', encoded);
+  }
+
+  String _formatTimeOfDay(TimeOfDay tod) {
+    final hour = tod.hourOfPeriod == 0 ? 12 : tod.hourOfPeriod;
+    final period = tod.period == DayPeriod.am ? 'AM' : 'PM';
+    final minute = tod.minute.toString().padLeft(2, '0');
+    return "${hour.toString().padLeft(2, '0')}:$minute $period";
+  }
+
+  TimeOfDay _parseTimeOfDay(String timeStr) {
+    try {
+      final parts = timeStr.split(' ');
+      final timeParts = parts[0].split(':');
+      int hour = int.parse(timeParts[0]);
+      final int minute = int.parse(timeParts[1]);
+      final String period = parts[1];
+
+      if (period == 'PM' && hour != 12) hour += 12;
+      if (period == 'AM' && hour == 12) hour = 0;
+
+      return TimeOfDay(hour: hour, minute: minute);
+    } catch (e) {
+      return TimeOfDay.now();
+    }
+  }
+
+  void _showScheduleSheet({WateringSchedule? schedule, int? index}) {
+    String title = schedule?.title ?? "";
+    String frequency = schedule?.frequency ?? "Daily";
+    String duration = schedule?.duration ?? "10 mins";
+    TimeOfDay selectedTime = schedule != null ? _parseTimeOfDay(schedule.time) : TimeOfDay.now();
+    bool smartSkip = schedule?.smartSkip ?? true;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+            top: 20,
+            left: 20,
+            right: 20,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(30),
+              topRight: Radius.circular(30),
+            ),
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: const BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.all(Radius.circular(10))),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(schedule == null ? "Add New Schedule" : "Edit Schedule",
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A))),
+                const SizedBox(height: 25),
+                TextFormField(
+                  initialValue: title,
+                  decoration: InputDecoration(
+                    labelText: "Schedule Title",
+                    hintText: "e.g. Morning Hydration",
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                    prefixIcon: const Icon(Icons.title_rounded, color: Color(0xFF2E7D32)),
+                  ),
+                  onChanged: (val) => title = val,
+                ),
+                const SizedBox(height: 20),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.access_time_rounded, color: Color(0xFF2E7D32)),
+                  ),
+                  title: const Text("Watering Time", style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text(_formatTimeOfDay(selectedTime),
+                      style: const TextStyle(fontSize: 18, color: Color(0xFF2E7D32), fontWeight: FontWeight.w600)),
+                  trailing: TextButton(
+                    onPressed: () async {
+                      final TimeOfDay? picked = await showTimePicker(
+                        context: context, 
+                        initialTime: selectedTime,
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: const ColorScheme.light(
+                                primary: Color(0xFF2E7D32),
+                                onPrimary: Colors.white,
+                                onSurface: Color(0xFF1A1A1A),
+                              ),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null) setModalState(() => selectedTime = picked);
+                    },
+                    child: const Text("Pick Time", style: TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const Divider(),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: frequency,
+                        decoration: InputDecoration(labelText: "Frequency", border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))),
+                        items: ["Daily", "Weekly", "Mon-Wed-Fri", "Weekends"]
+                            .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+                            .toList(),
+                        onChanged: (val) => setModalState(() => frequency = val!),
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: duration,
+                        decoration: InputDecoration(labelText: "Duration", border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))),
+                        items: ["5 mins", "10 mins", "15 mins", "20 mins", "30 mins"]
+                            .map((d) => DropdownMenuItem(value: d, child: Text(d)))
+                            .toList(),
+                        onChanged: (val) => setModalState(() => duration = val!),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text("Smart Skip", style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text("Skip watering if rain is predicted"),
+                  value: smartSkip,
+                  activeThumbColor: Colors.white,
+                  activeTrackColor: const Color(0xFF2E7D32),
+                  onChanged: (val) => setModalState(() => smartSkip = val),
+                ),
+                const SizedBox(height: 30),
+                SizedBox(
+                  width: double.infinity,
+                  height: 55,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      if (title.isEmpty) title = "Watering Task";
+                      setState(() {
+                        final newSchedule = WateringSchedule(
+                          time: _formatTimeOfDay(selectedTime),
+                          title: title,
+                          frequency: frequency,
+                          duration: duration,
+                          isEnabled: schedule?.isEnabled ?? true,
+                          smartSkip: smartSkip,
+                        );
+
+                        if (index == null) {
+                          schedules.add(newSchedule);
+                        } else {
+                          schedules[index] = newSchedule;
+                        }
+                      });
+                      _saveSchedules();
+                      Navigator.pop(context);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2E7D32),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      elevation: 0,
+                    ),
+                    child: Text(schedule == null ? "Add Schedule" : "Update Schedule",
+                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _deleteSchedule(int index) {
+    setState(() {
+      schedules.removeAt(index);
+    });
+    _saveSchedules();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F7F5),
+      body: Column(
+        children: [
+          _buildHeader(),
+          Expanded(
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF2E7D32)))
+                : schedules.isEmpty
+                    ? _buildEmptyState()
+                    : ListView.builder(
+                        padding: const EdgeInsets.only(left: 20, right: 20, top: 10, bottom: 100),
+                        itemCount: schedules.length,
+                        itemBuilder: (context, index) {
+                          return _buildScheduleCard(schedules[index], index);
+                        },
+                      ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showScheduleSheet(),
+        backgroundColor: const Color(0xFF2E7D32),
+        elevation: 4,
+        icon: const Icon(Icons.add_rounded, color: Colors.white),
+        label: const Text("New Schedule", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.calendar_today_outlined, size: 80, color: Colors.grey[300]),
+          const SizedBox(height: 16),
+          Text("No schedules set", style: TextStyle(color: Colors.grey[600], fontSize: 18, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          const Text("Tap 'New Schedule' to get started", style: TextStyle(color: Colors.grey)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.only(top: 60, left: 30, right: 30, bottom: 40),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF2E7D32), Color(0xFF1B5E20)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(40),
+          bottomRight: Radius.circular(40),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 15,
+            offset: Offset(0, 5),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () => Navigator.of(context).maybePop(),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
+                ),
+              ),
+              const SizedBox(width: 15),
+              const Text(
+                "Irrigation",
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            "Scheduler",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScheduleCard(WateringSchedule schedule, int index) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      schedule.time,
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2E7D32),
+                      ),
+                    ),
+                    Switch.adaptive(
+                      value: schedule.isEnabled,
+                      activeThumbColor: Colors.white,
+                      activeTrackColor: const Color(0xFF2E7D32),
+                      onChanged: (val) {
+                        setState(() {
+                          schedule.isEnabled = val;
+                        });
+                        _saveSchedules();
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Text(
+                      schedule.title,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1A1A1A),
+                      ),
+                    ),
+                    if (schedule.smartSkip) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: const [
+                            Icon(Icons.cloud_queue_rounded, size: 12, color: Colors.blueAccent),
+                            SizedBox(width: 4),
+                            Text("Smart Skip", style: TextStyle(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ]
+                  ],
+                ),
+                const SizedBox(height: 15),
+                Row(
+                  children: [
+                    _buildInfoBadge(Icons.calendar_today_rounded, schedule.frequency),
+                    const SizedBox(width: 15),
+                    _buildInfoBadge(Icons.timer_outlined, schedule.duration),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAF9),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(24),
+                bottomRight: Radius.circular(24),
+              ),
+              border: Border(top: BorderSide(color: Colors.grey.withOpacity(0.1))),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _actionButton(
+                  onPressed: () => _showScheduleSheet(schedule: schedule, index: index),
+                  icon: Icons.edit_outlined,
+                  label: "Edit",
+                  color: Colors.grey[600]!,
+                ),
+                const SizedBox(width: 15),
+                _actionButton(
+                  onPressed: () => _deleteSchedule(index),
+                  icon: Icons.delete_outline_rounded,
+                  label: "Delete",
+                  color: Colors.red[400]!,
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _actionButton({required VoidCallback onPressed, required IconData icon, required String label, required Color color}) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoBadge(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: Colors.grey[600]),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class WateringSchedule {
+  final String time;
+  final String title;
+  final String frequency;
+  final String duration;
+  bool isEnabled;
+  final bool smartSkip;
+
+  WateringSchedule({
+    required this.time,
+    required this.title,
+    required this.frequency,
+    required this.duration,
+    required this.isEnabled,
+    required this.smartSkip,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'time': time,
+        'title': title,
+        'frequency': frequency,
+        'duration': duration,
+        'isEnabled': isEnabled,
+        'smartSkip': smartSkip,
+      };
+
+  factory WateringSchedule.fromJson(Map<String, dynamic> json) => WateringSchedule(
+        time: json['time'],
+        title: json['title'],
+        frequency: json['frequency'],
+        duration: json['duration'],
+        isEnabled: json['isEnabled'],
+        smartSkip: json['smartSkip'],
+      );
+}

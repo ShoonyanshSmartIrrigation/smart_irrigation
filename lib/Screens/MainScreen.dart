@@ -1,0 +1,51 @@
+import 'package:flutter/material.dart';
+import 'Dashboard_screen.dart';
+import 'plant_control_screen.dart';
+import 'schedule_screen.dart';
+import 'Setting_Screen.dart';
+import '../Widgets/custom_bottom_nav.dart';
+
+class MainScreen extends StatefulWidget {
+  final int initialIndex;
+  const MainScreen({Key? key, this.initialIndex = 0}) : super(key: key);
+
+  @override
+  _MainScreenState createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  late int _currentIndex;
+
+  final List<Widget> _screens = [
+    DashboardScreen(),
+    PlantControlScreen(),
+    ScheduleScreen(),
+    SettingsScreen(),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+  }
+
+  void _onTap(int index) {
+    setState(() {
+      _currentIndex = index;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
+      ),
+      bottomNavigationBar: CustomBottomNavBar(
+        currentIndex: _currentIndex,
+        onTap: _onTap,
+      ),
+    );
+  }
+}
