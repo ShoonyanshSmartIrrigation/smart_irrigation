@@ -21,6 +21,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String connectionStatus = "Disconnected";
   String userName = "User";
   bool _mainPumpError = false;
+  bool _autoModeError = false;
 
   Timer? moistureTimer;
   Timer? irrigationTimer;
@@ -100,6 +101,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (mainMotor) {
           _toggleMainPump(false);
         }
+        // If auto mode is on, turn it off
+        if (autoMode) {
+          _toggleAutoMode(false);
+        }
         _playAlarm();
       }
     });
@@ -154,7 +159,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: TextStyle(color: Colors.grey, fontSize: 14),
                   ),
                   const SizedBox(height: 30),
-                  
                   // Quick Selection Row
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -349,6 +353,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (mounted) {
             setState(() {
               _mainPumpError = false;
+            });
+          }
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleAutoMode(bool value) async {
+    bool success = await _dashboardService.toggleAllMotors(value);
+    
+    if (mounted) {
+      if (success) {
+        setState(() {
+          autoMode = value;
+          _autoModeError = false;
+        });
+        
+        // Start timer if auto mode is turned on
+        if (value) {
+          startTimer();
+        } else {
+          // If turned off manually, stop timer
+          irrigationTimer?.cancel();
+          setState(() => timerSeconds = _selectedMinutes * 60);
+        }
+      } else {
+        setState(() {
+          _autoModeError = true;
+        });
+        
+        // Clear error state after 3 seconds
+        Timer(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              _autoModeError = false;
             });
           }
         });
@@ -607,12 +646,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: _mainPumpError ? Colors.redAccent : Colors.transparent,
+          color: (_mainPumpError || _autoModeError) ? Colors.redAccent : Colors.transparent,
           width: 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: _mainPumpError ? Colors.red.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.04), 
+            color: (_mainPumpError || _autoModeError) ? Colors.red.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.04), 
             blurRadius: 10, 
             offset: const Offset(0, 4)
           )
@@ -636,10 +675,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _buildToggleRow(
             "Automatic Mode", 
             autoMode, 
-            Icons.auto_awesome_rounded, 
-            (val) => setState(() => autoMode = val),
-            Colors.blue.withValues(alpha: 0.1),
-            Colors.blue,
+            _autoModeError ? Icons.wifi_off_rounded : Icons.auto_awesome_rounded, 
+            (val) => _toggleAutoMode(val),
+            _autoModeError ? Colors.red.withValues(alpha: 0.1) : Colors.blue.withValues(alpha: 0.1),
+            _autoModeError ? Colors.red : Colors.blue,
+            isError: _autoModeError,
           ),
         ],
       ),
