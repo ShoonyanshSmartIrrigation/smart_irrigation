@@ -1,4 +1,4 @@
-import 'dart:math';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
@@ -6,42 +6,70 @@ class AuthService {
   factory AuthService() => _instance;
   AuthService._internal();
 
-  String _generatedOtp = "";
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  String get generatedOtp => _generatedOtp;
+  // Sign Up with Email and Password
+  Future<User?> signUpWithEmail(String email, String password, String name, String phone) async {
+    try {
+      UserCredential result = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      User? user = result.user;
 
-  bool validateUserInput({required String name, required String phone, required String email}) {
-    if (name.isEmpty) return false;
-    if (phone.isEmpty || phone.length < 10) return false;
-    if (email.isEmpty || !email.contains("@")) return false;
-    return true;
-  }
-
-  bool validateOtp(String otp) {
-    if (otp.isEmpty) return false;
-    if (otp.length != 6) return false;
-    return true;
-  }
-
-  String generateOtp() {
-    Random random = Random();
-    _generatedOtp = (100000 + random.nextInt(900000)).toString();
-    return _generatedOtp;
-  }
-
-  Future<bool> verifyOtp(String otp, {required String name, required String email, required String phone}) async {
-    if (otp == _generatedOtp) {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isLoggedIn', true);
-      await prefs.setString('userName', name);
-      await prefs.setString('userEmail', email);
-      await prefs.setString('userPhone', phone);
-      return true;
+      if (user != null) {
+        // Save user data to SharedPreferences for local use
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('isLoggedIn', true);
+        await prefs.setString('userName', name);
+        await prefs.setString('userEmail', email);
+        await prefs.setString('userPhone', phone);
+        
+        // Update Firebase Display Name
+        await user.updateDisplayName(name);
+      }
+      return user;
+    } catch (e) {
+      print("Error in Signup: ${e.toString()}");
+      return null;
     }
-    return false;
+  }
+
+  // Login with Email and Password
+  Future<User?> loginWithEmail(String email, String password) async {
+    try {
+      UserCredential result = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      User? user = result.user;
+
+      if (user != null) {
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('isLoggedIn', true);
+        await prefs.setString('userName', user.displayName ?? "User");
+        await prefs.setString('userEmail', user.email ?? "");
+      }
+      return user;
+    } catch (e) {
+      print("Error in Login: ${e.toString()}");
+      return null;
+    }
+  }
+
+  // Send Password Reset Email
+  Future<bool> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+      return true;
+    } catch (e) {
+      print("Error in Password Reset: ${e.toString()}");
+      return false;
+    }
   }
 
   Future<void> logout() async {
+    await _auth.signOut();
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.clear();
   }

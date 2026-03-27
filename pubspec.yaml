@@ -18,6 +18,8 @@ dependencies:
   network_info_plus: ^6.0.0
   connectivity_plus: ^7.0.0
   flutter_ringtone_player: 4.0.0+4
+  firebase_core: ^4.6.0
+  firebase_auth: ^6.3.0
 
 dev_dependencies:
   flutter_test:

@@ -325,17 +325,6 @@ void stopAlarmIrrigation() {
   // TURN OFF MAIN MOTOR
   mainMotorState = false;
   digitalWrite(MAIN_MOTOR_PIN, LOW);
-}
-
-void setup() {
-  Serial.begin(115200);
-  delay(1000);
-
-  pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(MAIN_MOTOR_PIN, OUTPUT);
-  pinMode(STATUS_LED_PIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW);
-  digitalWrite(MAIN_MOTOR_PIN, LOW);
   digitalWrite(STATUS_LED_PIN, LOW);
 
   for (int i = 0; i < NUM_MOTORS; i++) {
@@ -780,101 +769,6 @@ void setupServer() {
       sendJsonResponse(json);
   });
 
-  // NEW Auto Mode APIs
-  server.on("/api/auto/start", HTTP_POST, []() {
-      sendCORSHeaders();
-
-      String body = server.arg("plain");
-      int duration = 25; // Default 25 minutes
-      bool motorSelection[NUM_MOTORS] = {true}; // Default all motors
-
-      // Simple JSON parsing for duration
-      int durationIndex = body.indexOf("\"duration\":");
-      if (durationIndex > 0) {
-        int start = durationIndex + 11;
-        int end = body.indexOf(",", start);
-        if (end < 0) end = body.indexOf("}", start);
-        if (end > start) {
-          String durationStr = body.substring(start, end);
-          duration = durationStr.toInt();
-          if (duration <= 0) duration = 25;
-        }
-      }
-
-      // Parse motor array
-      int motorsIndex = body.indexOf("\"motors\":");
-      if (motorsIndex > 0) {
-        int start = body.indexOf("[", motorsIndex);
-        int end = body.indexOf("]", start);
-        if (end > start) {
-          String motorsStr = body.substring(start + 1, end);
-          motorsStr.replace(" ", "");
-          motorsStr.replace("\n", "");
-
-          // Reset selection
-          for (int i = 0; i < NUM_MOTORS; i++) {
-            motorSelection[i] = false;
-          }
-
-          // Parse motor numbers
-          int pos = 0;
-          while (pos < motorsStr.length()) {
-            int comma = motorsStr.indexOf(",", pos);
-            if (comma < 0) comma = motorsStr.length();
-            String motorStr = motorsStr.substring(pos, comma);
-            int motorId = motorStr.toInt();
-            if (motorId >= 1 && motorId <= NUM_MOTORS) {
-              motorSelection[motorId - 1] = true;
-            }
-            pos = comma + 1;
-          }
-        }
-      }
-
-      // Start auto irrigation
-      unsigned long durationMs = (unsigned long)duration * 60 * 1000;
-      startIrrigation(durationMs, motorSelection, true);
-
-      String response = "{\"status\":\"ok\",\"autoMode\":true,\"duration\":" + String(duration) + ",\"motors\":[";
-      bool first = true;
-      for (int i = 0; i < NUM_MOTORS; i++) {
-        if (motorSelection[i]) {
-          if (!first) response += ",";
-          response += String(i+1);
-          first = false;
-        }
-      }
-      response += "]}";
-      sendJsonResponse(response);
-  });
-
-  server.on("/api/auto/stop", HTTP_POST, []() {
-      sendCORSHeaders();
-      stopAllMotors();
-      sendJsonResponse("{\"status\":\"ok\",\"autoMode\":false}");
-  });
-
-  // NEW Master Control APIs
-  server.on("/api/all/on", HTTP_ANY, []() {
-      sendCORSHeaders();
-      if (server.method() == HTTP_OPTIONS) {
-        server.send(200, "text/plain", "");
-        return;
-      }
-      turnAllMotorsOn();
-      sendJsonResponse("{\"status\":\"ok\",\"action\":\"all_on\"}");
-  });
-
-  server.on("/api/all/off", HTTP_ANY, []() {
-      sendCORSHeaders();
-      if (server.method() == HTTP_OPTIONS) {
-        server.send(200, "text/plain", "");
-        return;
-      }
-      turnAllMotorsOff();
-      sendJsonResponse("{\"status\":\"ok\",\"action\":\"all_off\"}");
-  });
-
   // NEW Alarm-based Irrigation APIs
   server.on("/api/alarm/set", HTTP_POST, []() {
       sendCORSHeaders();
@@ -990,11 +884,6 @@ void setupServer() {
       sendJsonResponse("{\"status\":\"ok\",\"alarm\":\"stopped\"}");
       Serial.println("⏰ Alarm Stopped");
   });
-
-  // GET all motor settings
-  server.on("/api/motor/settings", HTTP_GET, []() {
-      sendCORSHeaders();
-      String json = "{\"motors\":[";
 
       for (int i = 0; i < NUM_MOTORS; i++) {
         if (i > 0) json += ",";

@@ -367,6 +367,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'schedule_fab', // Added unique heroTag
         onPressed: () => _showScheduleSheet(),
         backgroundColor: const Color(0xFF2E7D32),
         elevation: 4,

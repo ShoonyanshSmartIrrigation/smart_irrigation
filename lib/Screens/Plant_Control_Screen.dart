@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/plant_service.dart';
 import '../data_manager.dart';
 import '../Widgets/build_header.dart';
+import '../Routes/app_Routes.dart';
 
 class PlantControlScreen extends StatefulWidget {
   const PlantControlScreen({super.key});
@@ -120,6 +121,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7F5),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'plant_settings_fab', // Added unique heroTag
         backgroundColor: const Color(0xFF2E7D32),
         onPressed: () => Navigator.pushNamed(context, '/settings'),
         child: const Icon(Icons.settings, color: Colors.white),
@@ -346,4 +348,3 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
     );
   }
 }
-

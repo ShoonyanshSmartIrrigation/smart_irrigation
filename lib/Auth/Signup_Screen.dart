@@ -1,60 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../services/auth_service.dart';
 import '../Routes/app_Routes.dart';
 import '../Widgets/build_header.dart';
+import '../services/auth_service.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
-
+class SignupScreen extends StatefulWidget {
   @override
-  _LoginScreenState createState() => _LoginScreenState();
+  _SignupScreenState createState() => _SignupScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _SignupScreenState extends State<SignupScreen> {
   final AuthService _authService = AuthService();
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController phoneController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
-  bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _isLoading = false;
 
-  void handleLogin() async {
+  void handleSignUp() async {
+    String name = nameController.text.trim();
+    String phone = phoneController.text.trim();
     String email = emailController.text.trim();
     String password = passwordController.text.trim();
 
-    if (email.isEmpty || password.isEmpty) {
+    if (name.isEmpty || phone.isEmpty || email.isEmpty || password.isEmpty) {
       showToast("Please fill all fields");
+      return;
+    }
+
+    if (password.length < 6) {
+      showToast("Password must be at least 6 characters");
       return;
     }
 
     setState(() => _isLoading = true);
 
-    User? user = await _authService.loginWithEmail(email, password);
+    User? user = await _authService.signUpWithEmail(email, password, name, phone);
 
-    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (user != null) {
-      showToast("Login Successful!");
+      showToast("Signup Successful!");
       Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
     } else {
-      showToast("Login Failed. Please check your credentials.");
-    }
-  }
-
-  void handleForgotPassword() async {
-    String email = emailController.text.trim();
-    if (email.isEmpty) {
-      showToast("Please enter your email address first");
-      return;
-    }
-
-    bool success = await _authService.sendPasswordResetEmail(email);
-    if (success) {
-      showToast("Password reset link sent to your email");
-    } else {
-      showToast("Error sending reset link. Verify your email.");
+      showToast("Signup Failed. Please check your details.");
     }
   }
 
@@ -63,7 +54,6 @@ class _LoginScreenState extends State<LoginScreen> {
       SnackBar(
         content: Text(msg),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         backgroundColor: const Color(0xFF2E7D32),
       ),
     );
@@ -77,57 +67,49 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Column(
           children: [
             BuildHeader(
-              height: 250,
+              height: 220,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      color: Colors.white.withOpacity(0.2),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.eco_rounded, size: 60, color: Colors.white),
+                    child: const Icon(Icons.person_add_rounded, size: 50, color: Colors.white),
                   ),
-                  const SizedBox(height: 15),
+                  const SizedBox(height: 10),
                   const Text(
-                    "Smart Irrigation",
+                    "Create Account",
                     style: TextStyle(
-                      fontSize: 28,
+                      fontSize: 26,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
-                      letterSpacing: 1.2,
+                      letterSpacing: 1.0,
                     ),
                   ),
                   Text(
-                    "Sustainable Future Begins Here",
+                    "Start managing your irrigation smarter",
                     style: TextStyle(
                       fontSize: 14,
-                      color: Colors.white.withValues(alpha: 0.8),
-                      letterSpacing: 0.5,
+                      color: Colors.white.withOpacity(0.8),
                     ),
                   ),
                 ],
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 30, 24, 24),
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    "Login to your account",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1B5E20),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 30),
-                  
+                  _buildTextField(nameController, "Full Name", Icons.person_outline),
+                  const SizedBox(height: 16),
+                  _buildTextField(phoneController, "Phone Number", Icons.phone_android_outlined, inputType: TextInputType.phone),
+                  const SizedBox(height: 16),
                   _buildTextField(emailController, "Email Address", Icons.email_outlined, inputType: TextInputType.emailAddress),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
                   _buildTextField(
                     passwordController, 
                     "Password", 
@@ -141,54 +123,40 @@ class _LoginScreenState extends State<LoginScreen> {
                     }
                   ),
 
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: handleForgotPassword,
-                      child: const Text(
-                        "Forgot Password?",
-                        style: TextStyle(
-                          color: Color(0xFF2E7D32),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 30),
 
                   _isLoading 
                   ? const Center(child: CircularProgressIndicator(color: Color(0xFF2E7D32)))
                   : ElevatedButton(
-                    onPressed: handleLogin,
+                    onPressed: handleSignUp,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2E7D32),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                       elevation: 4,
-                      shadowColor: const Color(0xFF2E7D32).withValues(alpha: 0.4),
+                      shadowColor: const Color(0xFF2E7D32).withOpacity(0.4),
                     ),
                     child: const Text(
-                      "LOGIN",
-                      style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5, fontSize: 16),
+                      "SIGN UP", 
+                      style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5, fontSize: 16)
                     ),
                   ),
 
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 25),
                   
                   Row(
                     children: [
                       const Expanded(child: Divider()),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text("OR CONNECT WITH", style: TextStyle(color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.bold)),
+                        child: Text("OR JOIN WITH", style: TextStyle(color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.bold)),
                       ),
                       const Expanded(child: Divider()),
                     ],
                   ),
 
-                  const SizedBox(height: 25),
+                  const SizedBox(height: 20),
 
                   OutlinedButton.icon(
                     onPressed: () {},
@@ -197,8 +165,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       height: 22,
                     ),
                     label: const Text(
-                      "Continue with Google",
-                      style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 15),
+                      "Continue with Google", 
+                      style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 15)
                     ),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 15),
@@ -208,17 +176,17 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 25),
 
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text("Don't have an account?", style: TextStyle(color: Colors.grey[700])),
+                      Text("Already have an account?", style: TextStyle(color: Colors.grey[700])),
                       TextButton(
-                        onPressed: () => Navigator.pushNamed(context, AppRoutes.signup),
+                        onPressed: () => Navigator.pop(context),
                         child: const Text(
-                          "Sign Up",
-                          style: TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold, fontSize: 16),
+                          "Login", 
+                          style: TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold, fontSize: 16)
                         ),
                       ),
                     ],
@@ -236,7 +204,7 @@ class _LoginScreenState extends State<LoginScreen> {
     TextEditingController controller, 
     String label, 
     IconData icon, 
-    {TextInputType inputType = TextInputType.text,
+    {TextInputType inputType = TextInputType.text, 
     bool isPassword = false,
     bool obscureText = false,
     VoidCallback? onTogglePassword}
@@ -247,7 +215,7 @@ class _LoginScreenState extends State<LoginScreen> {
         borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
