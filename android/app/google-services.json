@@ -12,7 +12,20 @@
           "package_name": "com.example.smartirrigation"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "977787660840-jdnnc8rien1qus2j8q89jkul3b4e2o8p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.smartirrigation",
+            "certificate_hash": "7ea421972a0d7ea88e9ab6d47fa4b70076860270"
+          }
+        },
+        {
+          "client_id": "977787660840-bitbnld9abh2br1ioq2ach0jndcfsa2c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyABns1_APrwZvAqodbL8EtjFtT6slQdijI"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "977787660840-bitbnld9abh2br1ioq2ach0jndcfsa2c.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "977787660840-0elk9kco4le9ebcpvd32bmkas4upukko.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.smartirrigation"
+              }
+            }
+          ]
         }
       }
     }

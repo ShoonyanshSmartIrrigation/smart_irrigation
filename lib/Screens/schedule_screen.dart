@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/schedule_service.dart';
 import '../services/plant_service.dart';
+import '../data_manager.dart'; // Needed for Plant type
 import '../Widgets/build_header.dart';
 
 class ScheduleScreen extends StatefulWidget {
@@ -21,6 +22,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   @override
   void initState() {
     super.initState();
+    _plantService.init(); // Initialize the service (starts syncing)
+    _plantService.addListener(_onServiceUpdate);
     _loadSchedules();
     _startScheduleChecker();
   }
@@ -28,7 +31,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   @override
   void dispose() {
     _checkTimer?.cancel();
+    _plantService.removeListener(_onServiceUpdate);
     super.dispose();
+  }
+
+  void _onServiceUpdate() {
+    if (mounted) setState(() {});
   }
 
   void _startScheduleChecker() {
@@ -49,11 +57,17 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Future<void> _runSchedule(WateringSchedule schedule) async {
+    final plants = _plantService.getPlants();
+    
     // 1. Turn ON the selected motors
     for (int motorId in schedule.selectedMotors) {
-      await _plantService.togglePlantMotor(motorId, true);
+      try {
+        final plant = plants.firstWhere((p) => p.id == motorId);
+        await _plantService.togglePlantMotor(plant, isOn: true);
+      } catch (e) {
+        debugPrint("Schedule Error: Plant $motorId not found");
+      }
     }
-    if (mounted) setState(() {});
 
     // 2. Wait for the duration
     int durationMinutes = int.tryParse(schedule.duration.split(' ')[0]) ?? 10;
@@ -61,9 +75,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     Timer(Duration(minutes: durationMinutes), () async {
       // 3. Turn OFF the selected motors after duration is complete
       for (int motorId in schedule.selectedMotors) {
-        await _plantService.togglePlantMotor(motorId, false);
+        try {
+          final plant = plants.firstWhere((p) => p.id == motorId);
+          await _plantService.togglePlantMotor(plant, isOn: false);
+        } catch (e) {
+          debugPrint("Schedule Error: Plant $motorId not found");
+        }
       }
-      if (mounted) setState(() {});
       
       _showCompletionNotification(schedule);
     });
@@ -82,10 +100,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   Future<void> _loadSchedules() async {
     final loadedSchedules = await _scheduleService.loadSchedules();
-    setState(() {
-      schedules = loadedSchedules;
-      isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        schedules = loadedSchedules;
+        isLoading = false;
+      });
+    }
   }
 
   Future<void> _saveSchedules() async {
@@ -367,7 +387,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'schedule_fab', // Added unique heroTag
+        heroTag: 'schedule_fab',
         onPressed: () => _showScheduleSheet(),
         backgroundColor: const Color(0xFF2E7D32),
         elevation: 4,
@@ -412,188 +432,124 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ),
               ),
               const SizedBox(width: 15),
-              const Text(
-                "Irrigation",
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.2,
-                ),
-              ),
+              const Text("Watering Schedule",
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
             ],
           ),
-          const SizedBox(height: 10),
-          const Text(
-            "Scheduler",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
-            ),
-          ),
+          const SizedBox(height: 5),
+          const Text("Automate your irrigation system", style: TextStyle(color: Colors.white70, fontSize: 14)),
         ],
       ),
     );
   }
 
   Widget _buildScheduleCard(WateringSchedule schedule, int index) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          )
-        ],
+    return Dismissible(
+      key: Key(schedule.title + schedule.time),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        margin: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(20)),
+        child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 30),
       ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      onDismissed: (_) => _deleteSchedule(index),
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _showScheduleSheet(schedule: schedule, index: index),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
                   children: [
-                    Text(
-                      schedule.time,
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF2E7D32),
-                      ),
-                    ),
-                    Switch.adaptive(
-                      value: schedule.isEnabled,
-                      activeThumbColor: Colors.white,
-                      activeTrackColor: const Color(0xFF2E7D32),
-                      onChanged: (val) {
-                        setState(() {
-                          schedule.isEnabled = val;
-                        });
-                        _saveSchedules();
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Text(
-                      _truncateText(schedule.title, 20),
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1A1A1A),
-                      ),
-                    ),
-                    if (schedule.smartSkip) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Row(
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
                           children: [
-                            Icon(Icons.cloud_queue_rounded, size: 12, color: Colors.blueAccent),
-                            SizedBox(width: 4),
-                            Text("Smart Skip", style: TextStyle(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(12)),
+                              child: const Icon(Icons.access_time_filled_rounded, color: Color(0xFF2E7D32), size: 24),
+                            ),
+                            const SizedBox(width: 15),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(schedule.time,
+                                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A))),
+                                Text(schedule.frequency, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                              ],
+                            ),
                           ],
                         ),
-                      ),
-                    ]
+                        Switch.adaptive(
+                          value: schedule.isEnabled,
+                          activeColor: const Color(0xFF2E7D32),
+                          onChanged: (val) {
+                            setState(() => schedule.isEnabled = val);
+                            _saveSchedules();
+                          },
+                        ),
+                      ],
+                    ),
+                    const Padding(padding: EdgeInsets.symmetric(vertical: 15), child: Divider(height: 1)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(_truncateText(schedule.title, 20),
+                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF424242))),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(Icons.timer_outlined, size: 14, color: Colors.grey[500]),
+                                  const SizedBox(width: 4),
+                                  Text(schedule.duration, style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                                  const SizedBox(width: 12),
+                                  Icon(Icons.settings_input_component_rounded, size: 14, color: Colors.grey[500]),
+                                  const SizedBox(width: 4),
+                                  Text("${schedule.selectedMotors.length} Motors",
+                                      style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (schedule.smartSkip)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(20)),
+                            child: Row(
+                              children: [
+                                Icon(Icons.auto_awesome_rounded, size: 12, color: Colors.blue[700]),
+                                const SizedBox(width: 4),
+                                Text("Smart Skip",
+                                    style: TextStyle(color: Colors.blue[700], fontSize: 10, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
-                const SizedBox(height: 15),
-                Wrap(
-                  spacing: 15,
-                  runSpacing: 10,
-                  children: [
-                    _buildInfoBadge(Icons.calendar_today_rounded, schedule.frequency),
-                    _buildInfoBadge(Icons.timer_outlined, schedule.duration),
-                    _buildInfoBadge(Icons.developer_board, "Motors: ${schedule.selectedMotors.join(', ')}"),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAF9),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(24),
-                bottomRight: Radius.circular(24),
               ),
-              border: Border(top: BorderSide(color: Colors.grey.withValues(alpha: 0.1))),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                _actionButton(
-                  onPressed: () => _showScheduleSheet(schedule: schedule, index: index),
-                  icon: Icons.edit_outlined,
-                  label: "Edit",
-                  color: Colors.grey[600]!,
-                ),
-                const SizedBox(width: 15),
-                _actionButton(
-                  onPressed: () => _deleteSchedule(index),
-                  icon: Icons.delete_outline_rounded,
-                  label: "Delete",
-                  color: Colors.red[400]!,
-                ),
-              ],
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _actionButton({required VoidCallback onPressed, required IconData icon, required String label, required Color color}) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 6),
-          Text(label, style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoBadge(IconData icon, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: Colors.grey[600]),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w600,
             ),
           ),
-        ],
+        ),
       ),
     );
   }

@@ -1,7 +1,5 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import '../services/dashboard_service.dart';
 import '../Widgets/build_header.dart';
@@ -15,103 +13,28 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final DashboardService _dashboardService = DashboardService();
-  bool mainMotor = false;
-  bool autoMode = false;
-  String connectionStatus = "Disconnected";
-  String userName = "User";
-  bool _mainPumpError = false;
-  bool _autoModeError = false;
-
-  Timer? moistureTimer;
-  Timer? irrigationTimer;
-  Timer? connectionCheckTimer;
-  int timerSeconds = 60; // Default to 1 minute
-  int _selectedMinutes = 1;
-  StreamSubscription? connectivitySubscription;
+  final DashboardService _service = DashboardService();
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
-    startMoistureSimulation();
-    _setupConnectivityListener();
-    _startPeriodicConnectionCheck();
+    _service.onIrrigationComplete = _playAlarm;
+    _service.init();
+    _service.addListener(_onServiceUpdate);
   }
 
-  void _loadUserData() async {
-    String name = await _dashboardService.getUserName();
-    if (mounted) {
-      setState(() {
-        userName = name;
-      });
-    }
+  @override
+  void dispose() {
+    _service.removeListener(_onServiceUpdate);
+    super.dispose();
   }
 
-  void _setupConnectivityListener() {
-    connectivitySubscription = _dashboardService.connectivityStream.listen((List<ConnectivityResult> results) {
-      if (results.contains(ConnectivityResult.none)) {
-        if (mounted) {
-          setState(() {
-            connectionStatus = "No Network";
-          });
-        }
-      } else {
-        _checkEspConnection();
-      }
-    });
-  }
-
-  void _startPeriodicConnectionCheck() {
-    connectionCheckTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      _checkEspConnection();
-    });
-  }
-
-  Future<void> _checkEspConnection() async {
-    bool isConnected = await _dashboardService.checkEspConnection();
-    if (mounted) {
-      setState(() {
-        connectionStatus = isConnected ? "SYSTEM ONLINE" : "DISCONNECTED";
-      });
-    }
-  }
-
-  void startMoistureSimulation() {
-    moistureTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      if (mounted) {
-        setState(() {
-          _dashboardService.simulateMoisture();
-        });
-      }
-    });
-  }
-
-  void startTimer() {
-    if (timerSeconds == 0) {
-      setState(() => timerSeconds = _selectedMinutes * 60);
-    }
-    irrigationTimer?.cancel();
-    irrigationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (timerSeconds > 0) {
-        if (mounted) setState(() => timerSeconds--);
-      } else {
-        timer.cancel();
-        // Check if motor is ON, then turn it OFF
-        if (mainMotor) {
-          _toggleMainPump(false);
-        }
-        // If auto mode is on, turn it off
-        if (autoMode) {
-          _toggleAutoMode(false);
-        }
-        _playAlarm();
-      }
-    });
+  void _onServiceUpdate() {
+    if (mounted) setState(() {});
   }
 
   void _showTimerPicker() {
-    int tempMinutes = _selectedMinutes;
+    int tempMinutes = _service.selectedMinutes;
     final FixedExtentScrollController scrollController = FixedExtentScrollController(initialItem: tempMinutes - 1);
 
     showModalBottomSheet(
@@ -202,9 +125,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       }).toList(),
                     ),
                   ),
-                  
                   const SizedBox(height: 20),
-                  
                   // Wheel Picker
                   SizedBox(
                     height: 200,
@@ -255,9 +176,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                   ),
-                  
                   const SizedBox(height: 30),
-                  
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: SizedBox(
@@ -265,12 +184,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       height: 60,
                       child: ElevatedButton(
                         onPressed: () {
-                          setState(() {
-                            _selectedMinutes = tempMinutes;
-                            if (irrigationTimer == null || !irrigationTimer!.isActive) {
-                              timerSeconds = _selectedMinutes * 60;
-                            }
-                          });
+                          _service.setTimerDuration(tempMinutes);
                           Navigator.pop(context);
                         },
                         style: ElevatedButton.styleFrom(
@@ -327,95 +241,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  String getTimerText() {
-    int min = timerSeconds ~/ 60;
-    int sec = timerSeconds % 60;
-    return "${min.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}";
-  }
-
-  Future<void> _toggleMainPump(bool value) async {
-    bool success = await _dashboardService.toggleMainPump(value);
-    
-    if (mounted) {
-      if (success) {
-        setState(() {
-          mainMotor = value;
-          _mainPumpError = false;
-        });
-      } else {
-        setState(() {
-          mainMotor = false; // Force OFF on failure
-          _mainPumpError = true;
-        });
-        
-        // Clear error state after 3 seconds
-        Timer(const Duration(seconds: 3), () {
-          if (mounted) {
-            setState(() {
-              _mainPumpError = false;
-            });
-          }
-        });
-      }
-    }
-  }
-
-  Future<void> _toggleAutoMode(bool value) async {
-    bool success = await _dashboardService.toggleAllMotors(value);
-    
-    if (mounted) {
-      if (success) {
-        setState(() {
-          autoMode = value;
-          _autoModeError = false;
-        });
-        
-        // Start timer if auto mode is turned on
-        if (value) {
-          startTimer();
-        } else {
-          // If turned off manually, stop timer
-          irrigationTimer?.cancel();
-          setState(() => timerSeconds = _selectedMinutes * 60);
-        }
-      } else {
-        setState(() {
-          _autoModeError = true;
-        });
-        
-        // Clear error state after 3 seconds
-        Timer(const Duration(seconds: 3), () {
-          if (mounted) {
-            setState(() {
-              _autoModeError = false;
-            });
-          }
-        });
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    moistureTimer?.cancel();
-    irrigationTimer?.cancel();
-    connectionCheckTimer?.cancel();
-    connectivitySubscription?.cancel();
-    FlutterRingtonePlayer().stop();
-    super.dispose();
-  }
-
   String _formatDisplayName(String name) {
     if (name.isEmpty) return "User";
-    
-    // Capitalize first letter and handle rest
     String formatted = name[0].toUpperCase() + name.substring(1);
-    
-    // Limit to 8 characters (as requested)
-    if (formatted.length > 8) {
-      return "${formatted.substring(0, 8)}..";
-    }
-    return formatted;
+    return formatted.length > 8 ? "${formatted.substring(0, 8)}.." : formatted;
   }
 
   @override
@@ -424,8 +253,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: const Color(0xFFF4F7F5),
       body: RefreshIndicator(
         onRefresh: () async {
-          _loadUserData();
-          await _checkEspConnection();
+          _service.loadUserData();
+          await _service.checkEspConnection();
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -465,8 +294,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildHeaderContent() {
-    String displayName = _formatDisplayName(userName);
-
+    String displayName = _formatDisplayName(_service.userName);
     return BuildHeader(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -482,7 +310,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
                 child: Text(
@@ -496,47 +323,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   maxLines: 1,
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: connectionStatus == "SYSTEM ONLINE" ? Colors.greenAccent : Colors.redAccent,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: (connectionStatus == "SYSTEM ONLINE" ? Colors.greenAccent : Colors.redAccent).withValues(alpha: 0.5),
-                            blurRadius: 4,
-                            spreadRadius: 1,
-                          )
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      connectionStatus,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 10,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildConnectionBadge(),
             ],
           ),
           const SizedBox(height: 10),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConnectionBadge() {
+    bool online = _service.connectionStatus == "SYSTEM ONLINE";
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: online ? Colors.greenAccent : Colors.redAccent,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: (online ? Colors.greenAccent : Colors.redAccent).withValues(alpha: 0.5),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                )
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _service.connectionStatus,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 10,
+              letterSpacing: 0.5,
+            ),
+          ),
         ],
       ),
     );
@@ -548,28 +380,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Expanded(
           child: _buildInfoCard(
             "MOISTURE",
-            "${_dashboardService.dataManager.avgMoisture}%",
+            "${_service.dataManager.avgMoisture}%",
             Icons.water_drop_rounded,
             const Color(0xFFE3F2FD),
             const Color(0xFF1976D2),
             showProgress: true,
-            progressValue: _dashboardService.dataManager.avgMoisture / 100,
+            progressValue: _service.dataManager.avgMoisture / 100,
           ),
         ),
         const SizedBox(width: 15),
         Expanded(
           child: _buildInfoCard(
             "HARDWARE",
-            "${_dashboardService.dataManager.activeMotors}/${_dashboardService.dataManager.totalMotors}",
+            "${_service.dataManager.activeMotors}/${_service.dataManager.totalMotors}",
             Icons.developer_board,
             const Color(0xFFFFF3E0),
             const Color(0xFFE65100),
             subTitle: "Active Motors",
-            onTap: () {
-              if (widget.onTabRequested != null) {
-                widget.onTabRequested!(1); // Index 1 is Zones/PlantControl
-              }
-            },
+            onTap: () => widget.onTabRequested?.call(1),
           ),
         ),
       ],
@@ -627,15 +455,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
     );
-
-    if (onTap != null) {
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: card,
-      );
-    }
-    return card;
+    return onTap != null ? GestureDetector(onTap: onTap, child: card) : card;
   }
 
   Widget _buildMainControls() {
@@ -646,12 +466,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: (_mainPumpError || _autoModeError) ? Colors.redAccent : Colors.transparent,
+          color: (_service.mainPumpError || _service.autoModeError) ? Colors.redAccent : Colors.transparent,
           width: 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: (_mainPumpError || _autoModeError) ? Colors.red.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.04), 
+            color: (_service.mainPumpError || _service.autoModeError) ? Colors.red.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.04), 
             blurRadius: 10, 
             offset: const Offset(0, 4)
           )
@@ -661,25 +481,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           _buildToggleRow(
             "Main Water Pump", 
-            mainMotor, 
-            _mainPumpError ? Icons.wifi_off_rounded : Icons.power_settings_new_rounded, 
-            (val) => _toggleMainPump(val),
-            _mainPumpError ? Colors.red.withValues(alpha: 0.1) : Colors.green.withValues(alpha: 0.1),
-            _mainPumpError ? Colors.red : Colors.green,
-            isError: _mainPumpError,
+            _service.mainMotor, 
+            _service.mainPumpError ? Icons.wifi_off_rounded : Icons.power_settings_new_rounded, 
+            (val) => _service.toggleMainPump(val),
+            _service.mainPumpError ? Colors.red.withValues(alpha: 0.1) : Colors.green.withValues(alpha: 0.1),
+            _service.mainPumpError ? Colors.red : Colors.green,
+            isError: _service.mainPumpError,
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20),
-            child: Divider(height: 1),
-          ),
+          const Padding(padding: EdgeInsets.symmetric(horizontal: 20), child: Divider(height: 1)),
           _buildToggleRow(
             "Automatic Mode", 
-            autoMode, 
-            _autoModeError ? Icons.wifi_off_rounded : Icons.auto_awesome_rounded, 
-            (val) => _toggleAutoMode(val),
-            _autoModeError ? Colors.red.withValues(alpha: 0.1) : Colors.blue.withValues(alpha: 0.1),
-            _autoModeError ? Colors.red : Colors.blue,
-            isError: _autoModeError,
+            _service.autoMode, 
+            _service.autoModeError ? Icons.wifi_off_rounded : Icons.auto_awesome_rounded, 
+            (val) => _service.toggleAllMotors(val),
+            _service.autoModeError ? Colors.red.withValues(alpha: 0.1) : Colors.blue.withValues(alpha: 0.1),
+            _service.autoModeError ? Colors.red : Colors.blue,
+            isError: _service.autoModeError,
           ),
         ],
       ),
@@ -715,80 +532,81 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildTimerCard() {
-    bool isRunning = irrigationTimer?.isActive ?? false;
-
+    bool isRunning = _service.isIrrigationRunning;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(30),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(30)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("NEXT CYCLE", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                  Row(
-                    children: [
-                      const Text("Irrigation Timer", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                      Visibility(
-                        visible: !isRunning,
-                        maintainSize: true,
-                        maintainAnimation: true,
-                        maintainState: true,
-                        child: IconButton(
-                          icon: const Icon(Icons.edit_calendar_rounded, color: Colors.green, size: 20),
-                          onPressed: _showTimerPicker,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              Icon(Icons.timer_outlined, color: Colors.white.withValues(alpha: 0.2), size: 32),
-            ],
-          ),
-          GestureDetector(
-            onTap: isRunning ? null : _showTimerPicker,
-            child: Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(getTimerText(), style: const TextStyle(color: Colors.white, fontSize: 50, fontWeight: FontWeight.bold, letterSpacing: 2)),
-                  const SizedBox(width: 8),
-                  const Text("min", style: TextStyle(color: Colors.grey, fontSize: 24, fontWeight: FontWeight.w500)),
-                ],
-              ),
-            ),
-          ),
+          _buildTimerHeader(isRunning),
+          _buildTimerDisplay(isRunning),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _timerButton(isRunning ? "RUNNING" : "START", isRunning ? const Color(0xFF2E7D32).withValues(alpha: 0.5) : const Color(0xFF2E7D32), isRunning ? () {} : startTimer),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _timerButton("STOP", const Color(0xFF332020), () {
-                  irrigationTimer?.cancel();
-                  FlutterRingtonePlayer().stop();
-                  setState(() => timerSeconds = _selectedMinutes * 60);
-                }, textColor: Colors.redAccent),
-              ),
-            ],
-          )
+          _buildTimerControls(isRunning),
         ],
       ),
+    );
+  }
+
+  Widget _buildTimerHeader(bool isRunning) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("NEXT CYCLE", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            Row(
+              children: [
+                const Text("Irrigation Timer", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                if (!isRunning) IconButton(
+                  icon: const Icon(Icons.edit_calendar_rounded, color: Colors.green, size: 20),
+                  onPressed: _showTimerPicker,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+          ],
+        ),
+        Icon(Icons.timer_outlined, color: Colors.white.withValues(alpha: 0.2), size: 32),
+      ],
+    );
+  }
+
+  Widget _buildTimerDisplay(bool isRunning) {
+    return GestureDetector(
+      onTap: isRunning ? null : _showTimerPicker,
+      child: Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(_service.getTimerText(), style: const TextStyle(color: Colors.white, fontSize: 50, fontWeight: FontWeight.bold, letterSpacing: 2)),
+            const SizedBox(width: 8),
+            const Text("min", style: TextStyle(color: Colors.grey, fontSize: 24, fontWeight: FontWeight.w500)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimerControls(bool isRunning) {
+    return Row(
+      children: [
+        Expanded(
+          child: _timerButton(isRunning ? "RUNNING" : "START", isRunning ? const Color(0xFF2E7D32).withValues(alpha: 0.5) : const Color(0xFF2E7D32), isRunning ? () {} : _service.startIrrigationTimer),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _timerButton("STOP", const Color(0xFF332020), () {
+            _service.stopIrrigationTimer();
+            FlutterRingtonePlayer().stop();
+          }, textColor: Colors.redAccent),
+        ),
+      ],
     );
   }
 

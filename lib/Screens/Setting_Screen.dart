@@ -11,29 +11,23 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final SettingsService _settingsService = SettingsService();
-  int minMoisture = 30;
-  int maxMoisture = 70;
-  String esp32Ip = "Not Set";
+  final SettingsService _service = SettingsService();
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
+    _service.init();
+    _service.addListener(_onServiceUpdate);
   }
 
-  Future<void> _loadSettings() async {
-    final settings = await _settingsService.loadSettings();
-    setState(() {
-      minMoisture = settings["min_moisture"];
-      maxMoisture = settings["max_moisture"];
-      esp32Ip = settings["esp_ip"];
-    });
+  @override
+  void dispose() {
+    _service.removeListener(_onServiceUpdate);
+    super.dispose();
   }
 
-  Future<void> _updateSetting(String key, dynamic value) async {
-    await _settingsService.updateSetting(key, value);
-    _loadSettings();
+  void _onServiceUpdate() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -44,45 +38,92 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const BuildHeader(
+            BuildHeader(
+              height: 220,
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.settings, color: Colors.white, size: 30),
-                    SizedBox(height: 10),
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 3),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 10,
+                            spreadRadius: 2,
+                          )
+                        ],
+                      ),
+                      child: CircleAvatar(
+                        radius: 38,
+                        backgroundColor: Colors.white,
+                        child: Text(
+                          _service.getInitials(),
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2E7D32),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     Text(
-                      "Settings",
-                      style: TextStyle(
+                      _service.userName,
+                      style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 28,
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _service.userEmail,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
                   ],
                 ),
               ),
             ),
+
             _buildSectionHeader("Irrigation Thresholds"),
             _buildSettingCard(
               icon: Icons.water_drop_outlined,
               title: "Minimum Moisture",
-              subtitle: "$minMoisture%",
-              onTap: () => _showMoistureDialog("Set Minimum Moisture", minMoisture, 0, maxMoisture - 1, (val) => _updateSetting("min_moisture", val)),
+              subtitle: "${_service.minMoisture}%",
+              onTap: () => _showMoistureDialog(
+                "Set Minimum Moisture", 
+                _service.minMoisture, 
+                0, 
+                _service.maxMoisture - 1, 
+                (val) => _service.updateSetting("min_moisture", val)
+              ),
             ),
             _buildSettingCard(
               icon: Icons.waves,
               title: "Maximum Moisture",
-              subtitle: "$maxMoisture%",
-              onTap: () => _showMoistureDialog("Set Maximum Moisture", maxMoisture, minMoisture + 1, 100, (val) => _updateSetting("max_moisture", val)),
+              subtitle: "${_service.maxMoisture}%",
+              onTap: () => _showMoistureDialog(
+                "Set Maximum Moisture", 
+                _service.maxMoisture, 
+                _service.minMoisture + 1, 
+                100, 
+                (val) => _service.updateSetting("max_moisture", val)
+              ),
             ),
             
             _buildSectionHeader("System Configuration"),
             _buildSettingCard(
               icon: Icons.settings_ethernet,
               title: "ESP32 IP Address",
-              subtitle: esp32Ip,
+              subtitle: _service.esp32Ip,
               onTap: _showIpDialog,
             ),
             
@@ -206,7 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showIpDialog() {
-    TextEditingController controller = TextEditingController(text: esp32Ip == "Not Set" ? "" : esp32Ip);
+    TextEditingController controller = TextEditingController(text: _service.esp32Ip == "Not Set" ? "" : _service.esp32Ip);
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -222,8 +263,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7D32)),
             onPressed: () {
               String value = controller.text.trim();
-              if (_settingsService.isValidIp(value)) {
-                _updateSetting("esp_ip", value);
+              if (_service.isValidIp(value)) {
+                _service.updateSetting("esp_ip", value);
                 Navigator.pop(context);
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Invalid IP Address")));
@@ -248,7 +289,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
             onPressed: () async {
-              await _settingsService.logout();
+              await _service.logout();
               Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (route) => false);
             },
             child: const Text("LOGOUT", style: TextStyle(color: Colors.white)),

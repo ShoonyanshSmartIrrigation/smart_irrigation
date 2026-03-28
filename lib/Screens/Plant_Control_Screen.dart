@@ -1,9 +1,6 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/plant_service.dart';
-import '../data_manager.dart';
 import '../Widgets/build_header.dart';
-import '../Routes/app_Routes.dart';
 
 class PlantControlScreen extends StatefulWidget {
   const PlantControlScreen({super.key});
@@ -12,108 +9,23 @@ class PlantControlScreen extends StatefulWidget {
 }
 
 class _PlantControlScreenState extends State<PlantControlScreen> {
-  final PlantService _plantService = PlantService();
-  Timer? syncTimer;
-  bool isSyncing = false;
-  bool isTogglingAll = false;
-  bool _allMotorsError = false;
-  bool _isMasterOn = false;
-
-  // Track which plants have connection errors
-  final Map<int, bool> _plantConnectionErrors = {};
+  final PlantService _service = PlantService();
 
   @override
   void initState() {
     super.initState();
-    _startSync();
-  }
-
-  void _startSync() {
-    _fetchMoistureData();
-    syncTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      _fetchMoistureData();
-    });
+    _service.init();
+    _service.addListener(_onServiceUpdate);
   }
 
   @override
   void dispose() {
-    syncTimer?.cancel();
+    _service.removeListener(_onServiceUpdate);
     super.dispose();
   }
 
-  Future<void> _fetchMoistureData() async {
-    if (isSyncing) return;
-    setState(() => isSyncing = true);
-
-    await _plantService.fetchMoistureData();
-
-    if (mounted) {
-      setState(() {
-        isSyncing = false;
-        // Update master switch state based on actual motors
-        _isMasterOn = _plantService.getActiveMotors() == _plantService.getTotalMotors();
-      });
-    }
-  }
-
-  Future<void> togglePlantMotor(Plant plant) async {
-    bool success = await _plantService.togglePlantMotor(plant.id, !plant.isMotorOn);
-
-    if (success) {
-      setState(() {
-        _plantConnectionErrors[plant.id] = false;
-        // Update master switch state after toggling a plant
-        _isMasterOn = _plantService.getActiveMotors() == _plantService.getTotalMotors();
-      });
-    } else {
-      setState(() {
-        // If connection fails, force the motor status to OFF in the app
-        plant.isMotorOn = false;
-        _plantConnectionErrors[plant.id] = true;
-        // Update master switch state in case
-        _isMasterOn = _plantService.getActiveMotors() == _plantService.getTotalMotors();
-      });
-
-      // Automatically clear the error highlight after 3 seconds
-      Timer(const Duration(seconds: 3), () {
-        if (mounted) {
-          setState(() {
-            _plantConnectionErrors[plant.id] = false;
-          });
-        }
-      });
-    }
-  }
-
-  Future<void> _toggleAllMotors(bool value) async {
-    if (value) {
-      print("Start button clicked");
-    } else {
-      print("Stop button clicked");
-    }
-    setState(() => isTogglingAll = true);
-
-    bool success = await _plantService.toggleAllMotors(value);
-
-    if (mounted) {
-      if (success) {
-        setState(() {
-          for (var plant in _plantService.getPlants()) {
-            plant.isMotorOn = value; // update UI
-          }
-          // Update master switch state based on actual motors
-          _isMasterOn = _plantService.getActiveMotors() == _plantService.getTotalMotors();
-          isTogglingAll = false;
-        });
-      } else {
-        setState(() {
-          isTogglingAll = false;
-          _allMotorsError = true;
-          // Update master switch state based on actual motors (revert)
-          _isMasterOn = _plantService.getActiveMotors() == _plantService.getTotalMotors();
-        });
-      }
-    }
+  void _onServiceUpdate() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -121,7 +33,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7F5),
       floatingActionButton: FloatingActionButton(
-        heroTag: 'plant_settings_fab', // Added unique heroTag
+        heroTag: 'plant_settings_fab',
         backgroundColor: const Color(0xFF2E7D32),
         onPressed: () => Navigator.pushNamed(context, '/settings'),
         child: const Icon(Icons.settings, color: Colors.white),
@@ -129,7 +41,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
       body: Column(
         children: [
           _buildStatsHeader(),
-          const SizedBox(height: 100), // Adjusted space for overlapping card
+          const SizedBox(height: 100),
           Expanded(
             child: GridView.builder(
               padding: const EdgeInsets.all(15),
@@ -139,9 +51,9 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                 mainAxisSpacing: 15,
                 childAspectRatio: 0.85,
               ),
-              itemCount: _plantService.getTotalMotors(),
+              itemCount: _service.getTotalMotors(),
               itemBuilder: (context, index) {
-                final plant = _plantService.getPlants()[index];
+                final plant = _service.getPlants()[index];
                 return _buildPlantCard(plant);
               },
             ),
@@ -166,7 +78,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                     "Plant Control",
                     style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
                   ),
-                  if (isSyncing || isTogglingAll)
+                  if (_service.isSyncing || _service.isTogglingAll)
                     const SizedBox(
                       width: 20,
                       height: 20,
@@ -183,7 +95,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
           ),
         ),
         Positioned(
-          bottom: -100, // Adjusted for smaller card
+          bottom: -100,
           left: 20,
           right: 20,
           child: Card(
@@ -198,13 +110,12 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _statItem("TOTAL PLANTS", _plantService.getTotalMotors().toString(), Icons.grass_rounded),
+                      _statItem("TOTAL PLANTS", _service.getTotalMotors().toString(), Icons.grass_rounded),
                       Container(width: 1, height: 30, color: Colors.grey[200]),
-                      _statItem("ACTIVE", _plantService.getActiveMotors().toString(), Icons.water_drop_rounded),
+                      _statItem("ACTIVE", _service.getActiveMotors().toString(), Icons.water_drop_rounded),
                     ],
                   ),
                   const Divider(height: 30),
-                  // Master Control Row
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -215,13 +126,13 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                             Text(
                               "MASTER CONTROLS",
                               style: TextStyle(
-                                color: _allMotorsError ? Colors.red : Colors.black87,
+                                color: _service.allMotorsError ? Colors.red : Colors.black87,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 14,
                                 letterSpacing: 0.5,
                               ),
                             ),
-                            if (_allMotorsError)
+                            if (_service.allMotorsError)
                               const Text(
                                 "CONNECTION FAILED",
                                 style: TextStyle(color: Colors.red, fontSize: 11),
@@ -232,7 +143,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                       Row(
                         children: [
                           ElevatedButton(
-                            onPressed: isTogglingAll ? null : () => _toggleAllMotors(true),
+                            onPressed: _service.isTogglingAll ? null : () => _service.toggleAllMotors(true),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF2E7D32),
                               foregroundColor: Colors.white,
@@ -242,7 +153,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton(
-                            onPressed: isTogglingAll ? null : () => _toggleAllMotors(false),
+                            onPressed: _service.isTogglingAll ? null : () => _service.toggleAllMotors(false),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.red,
                               foregroundColor: Colors.white,
@@ -263,8 +174,19 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
     );
   }
 
-  Widget _buildPlantCard(Plant plant) {
-    bool hasError = _plantConnectionErrors[plant.id] ?? false;
+  Widget _statItem(String label, String value, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.grey[400], size: 20),
+        const SizedBox(height: 5),
+        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 10, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  Widget _buildPlantCard(dynamic plant) {
+    bool hasError = _service.plantConnectionErrors[plant.id] ?? false;
     Color moistureColor = plant.moistureLevel < 30 ? Colors.red : (plant.moistureLevel < 60 ? Colors.orange : Colors.green);
 
     return AnimatedContainer(
@@ -278,7 +200,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: hasError ? Colors.red.withOpacity(0.2) : Colors.black.withOpacity(0.05),
+            color: hasError ? Colors.red.withValues(alpha: 0.2) : Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 5),
           )
@@ -318,7 +240,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                 Switch.adaptive(
                   value: plant.isMotorOn,
                   activeColor: const Color(0xFF2E7D32),
-                  onChanged: isTogglingAll ? null : (_) => togglePlantMotor(plant),
+                  onChanged: _service.isTogglingAll ? null : (_) => _service.togglePlantMotor(plant),
                 ),
                 Text(
                   hasError ? "OFFLINE" : (plant.isMotorOn ? "ACTIVE" : "INACTIVE"),
@@ -334,17 +256,6 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _statItem(String title, String value, IconData icon) {
-    return Column(
-      children: [
-        Icon(icon, color: Colors.grey[400], size: 16),
-        const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
-        Text(title, style: TextStyle(color: Colors.grey[500], fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-      ],
     );
   }
 }

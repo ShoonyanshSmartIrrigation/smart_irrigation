@@ -1,3 +1,55 @@
+// import 'package:flutter/material.dart';
+// import 'Dashboard_screen.dart';
+// import 'plant_control_screen.dart';
+// import 'schedule_screen.dart';
+// import 'Setting_Screen.dart';
+// import '../Widgets/custom_bottom_nav.dart';
+//
+// class MainScreen extends StatefulWidget {
+//   final int initialIndex;
+//   const MainScreen({Key? key, this.initialIndex = 0}) : super(key: key);
+//
+//   @override
+//   _MainScreenState createState() => _MainScreenState();
+// }
+//
+// class _MainScreenState extends State<MainScreen> {
+//   late int _currentIndex;
+//
+//   @override
+//   void initState() {
+//     super.initState();
+//     _currentIndex = widget.initialIndex;
+//   }
+//
+//   void _onTap(int index) {
+//     setState(() {
+//       _currentIndex = index;
+//     });
+//   }
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final List<Widget> _screens = [
+//     DashboardScreen(onTabRequested: _onTap),
+//      const PlantControlScreen(),
+//      const ScheduleScreen(),
+//       const SettingsScreen(),
+//     ];
+//
+//     return Scaffold(
+//       body: IndexedStack(
+//         index: _currentIndex,
+//         children: _screens,
+//       ),
+//       bottomNavigationBar: CustomBottomNavBar(
+//         currentIndex: _currentIndex,
+//         onTap: _onTap,
+//       ),
+//     );
+//   }
+// }
+
 import 'package:flutter/material.dart';
 import 'Dashboard_screen.dart';
 import 'plant_control_screen.dart';
@@ -7,44 +59,62 @@ import '../Widgets/custom_bottom_nav.dart';
 
 class MainScreen extends StatefulWidget {
   final int initialIndex;
-  const MainScreen({Key? key, this.initialIndex = 0}) : super(key: key);
+  const MainScreen({super.key, this.initialIndex = 0});
 
   @override
-  _MainScreenState createState() => _MainScreenState();
+  State<MainScreen> createState() => _MainScreenState();
 }
 
 class _MainScreenState extends State<MainScreen> {
   late int _currentIndex;
+  late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
+
     _currentIndex = widget.initialIndex;
+
+    // ✅ Initialize screens only once (performance optimized)
+    _screens = [
+      DashboardScreen(onTabRequested: _onTap),
+      const PlantControlScreen(),
+      const ScheduleScreen(),
+      const SettingsScreen(),
+    ];
   }
 
   void _onTap(int index) {
+    if (_currentIndex == index) return; // ✅ avoid unnecessary rebuild
     setState(() {
       _currentIndex = index;
     });
   }
 
+  // ✅ Handle back button (production UX)
+  Future<bool> _onWillPop() async {
+    if (_currentIndex != 0) {
+      setState(() => _currentIndex = 0);
+      return false;
+    }
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final List<Widget> _screens = [
-      DashboardScreen(onTabRequested: _onTap),
-      PlantControlScreen(),
-      ScheduleScreen(),
-      SettingsScreen(),
-    ];
-
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
-      ),
-      bottomNavigationBar: CustomBottomNavBar(
-        currentIndex: _currentIndex,
-        onTap: _onTap,
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        body: SafeArea( // ✅ UI safety
+          child: IndexedStack(
+            index: _currentIndex,
+            children: _screens,
+          ),
+        ),
+        bottomNavigationBar: CustomBottomNavBar(
+          currentIndex: _currentIndex,
+          onTap: _onTap,
+        ),
       ),
     );
   }
