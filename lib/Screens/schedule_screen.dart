@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/schedule_service.dart';
-import '../services/plant_service.dart';
 import '../Widgets/build_header.dart';
+import '../Core/theme/app_colors.dart';
 
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
@@ -13,21 +13,18 @@ class ScheduleScreen extends StatefulWidget {
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
   final ScheduleService _service = ScheduleService();
-  final PlantService _plantService = PlantService();
-  Timer? _checkTimer;
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _plantService.init();
-    _service.init();
     _service.addListener(_onServiceUpdate);
-    _startScheduleChecker();
+    // Fetch schedules from ESP32 on init
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshSchedules());
   }
 
   @override
   void dispose() {
-    _checkTimer?.cancel();
     _service.removeListener(_onServiceUpdate);
     super.dispose();
   }
@@ -36,64 +33,64 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     if (mounted) setState(() {});
   }
 
-  void _startScheduleChecker() {
-    _checkTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
-      _checkAndRunSchedules();
-    });
-  }
-
-  void _checkAndRunSchedules() {
-    final now = TimeOfDay.now();
-    final nowStr = _formatTimeOfDay(now);
-
-    for (var schedule in _service.schedules) {
-      if (schedule.isEnabled && _formatTimeOfDay(TimeOfDay.fromDateTime(schedule.time)) == nowStr) {
-        _runSchedule(schedule);
-      }
+  Future<void> _refreshSchedules() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      await _service.fetchSchedules();
+    } catch (e) {
+      _showError("Connection Error: Could not fetch schedules from ESP32. Check your WiFi connection.");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _runSchedule(WateringSchedule schedule) async {
-    final plants = _plantService.getPlants();
-    
-    for (int motorId in schedule.selectedMotors) {
-      try {
-        final plant = plants.firstWhere((p) => p.id == motorId);
-        await _plantService.togglePlantMotor(plant, isOn: true);
-      } catch (e) {
-        debugPrint("Schedule Error: Plant $motorId not found");
-      }
-    }
-
-    Timer(Duration(minutes: schedule.durationInMinutes), () async {
-      for (int motorId in schedule.selectedMotors) {
-        try {
-          final plant = plants.firstWhere((p) => p.id == motorId);
-          await _plantService.togglePlantMotor(plant, isOn: false);
-        } catch (e) {
-          debugPrint("Schedule Error: Plant $motorId not found");
-        }
-      }
-      _showCompletionNotification(schedule);
-    });
-  }
-
-  void _showCompletionNotification(WateringSchedule schedule) {
+  void _showError(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("Schedule '${schedule.title}' completed. Motors turned off."),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 5),
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
+  void _showSuccess(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.green),
+    );
+  }
+
+  // Time formatting for display (e.g. 08:30 PM)
   String _formatTimeOfDay(TimeOfDay tod) {
     final hour = tod.hourOfPeriod == 0 ? 12 : tod.hourOfPeriod;
     final period = tod.period == DayPeriod.am ? 'AM' : 'PM';
     final minute = tod.minute.toString().padLeft(2, '0');
     return "${hour.toString().padLeft(2, '0')}:$minute $period";
+  }
+
+  // Convert ESP32 "HH:mm" string to display format
+  String _formatTimeString(String timeStr) {
+    try {
+      final parts = timeStr.split(':');
+      final tod = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+      return _formatTimeOfDay(tod);
+    } catch (e) {
+      return timeStr;
+    }
+  }
+
+  // Convert ESP32 "HH:mm" string to TimeOfDay for picker
+  TimeOfDay _parseTimeString(String timeStr) {
+    try {
+      final parts = timeStr.split(':');
+      return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+    } catch (e) {
+      return TimeOfDay.now();
+    }
+  }
+
+  // Convert TimeOfDay to "HH:mm" for ESP32 API
+  String _timeToString(TimeOfDay tod) {
+    return "${tod.hour.toString().padLeft(2, '0')}:${tod.minute.toString().padLeft(2, '0')}";
   }
 
   String _truncateText(String text, int maxLength) {
@@ -105,8 +102,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     String title = schedule?.title ?? "";
     String frequency = schedule?.frequency ?? "Daily";
     int duration = schedule?.durationInMinutes ?? 10;
-    TimeOfDay selectedTime = schedule != null ? TimeOfDay.fromDateTime(schedule.time) : TimeOfDay.now();
-    bool smartSkip = schedule?.smartSkip ?? true;
+    TimeOfDay selectedTime = schedule != null ? _parseTimeString(schedule.time) : TimeOfDay.now();
     List<int> selectedMotors = schedule != null ? List.from(schedule.selectedMotors) : [1];
 
     showModalBottomSheet(
@@ -122,7 +118,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             right: 20,
           ),
           decoration: const BoxDecoration(
-            color: Colors.white,
+            color: AppColors.white,
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(30),
               topRight: Radius.circular(30),
@@ -145,13 +141,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(schedule == null ? "Add New Schedule" : "Edit Schedule",
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A))),
+                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.scheduleTextDark)),
                     if (schedule != null)
                       IconButton(
-                        icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+                        icon: const Icon(Icons.delete_outline_rounded, color: AppColors.scheduleDeleteIcon),
                         onPressed: () {
-                          _service.deleteSchedule(schedule.id);
                           Navigator.pop(context);
+                          _showDeleteConfirmation(schedule.id);
                         },
                       ),
                   ],
@@ -163,7 +159,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     labelText: "Schedule Title",
                     hintText: "e.g. Morning Hydration",
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
-                    prefixIcon: const Icon(Icons.title_rounded, color: Color(0xFF2E7D32)),
+                    prefixIcon: const Icon(Icons.title_rounded, color: AppColors.primary),
                   ),
                   onChanged: (val) => title = val,
                 ),
@@ -172,12 +168,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   contentPadding: EdgeInsets.zero,
                   leading: Container(
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(Icons.access_time_rounded, color: Color(0xFF2E7D32)),
+                    decoration: BoxDecoration(color: AppColors.scheduleIconBg, borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.access_time_rounded, color: AppColors.primary),
                   ),
                   title: const Text("Watering Time", style: TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text(_formatTimeOfDay(selectedTime),
-                      style: const TextStyle(fontSize: 18, color: Color(0xFF2E7D32), fontWeight: FontWeight.w600)),
+                      style: const TextStyle(fontSize: 18, color: AppColors.primary, fontWeight: FontWeight.w600)),
                   trailing: TextButton(
                     onPressed: () async {
                       final TimeOfDay? picked = await showTimePicker(
@@ -186,7 +182,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       );
                       if (picked != null) setModalState(() => selectedTime = picked);
                     },
-                    child: const Text("Pick Time", style: TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold)),
+                    child: const Text("Pick Time", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                   ),
                 ),
                 const Divider(),
@@ -214,11 +210,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         width: 45,
                         height: 45,
                         decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFF2E7D32) : Colors.grey[200],
+                          color: isSelected ? AppColors.primary : Colors.grey[200],
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Center(
-                          child: Text("$motorNum", style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
+                          child: Text("$motorNum", style: TextStyle(color: isSelected ? AppColors.white : AppColors.black87, fontWeight: FontWeight.bold)),
                         ),
                       ),
                     );
@@ -248,47 +244,40 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text("Smart Skip", style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text("Skip watering if rain is predicted"),
-                  value: smartSkip,
-                  activeColor: const Color(0xFF2E7D32),
-                  onChanged: (val) => setModalState(() => smartSkip = val),
-                ),
                 const SizedBox(height: 30),
                 SizedBox(
                   width: double.infinity,
                   height: 55,
                   child: ElevatedButton(
-                    onPressed: () {
-                      final now = DateTime.now();
-                      final DateTime scheduleTime = DateTime(now.year, now.month, now.day, selectedTime.hour, selectedTime.minute);
-                      
+                    onPressed: () async {
                       final newSchedule = WateringSchedule(
                         id: schedule?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                        time: scheduleTime,
+                        time: _timeToString(selectedTime),
                         title: title.isEmpty ? "Watering Task" : title,
                         frequency: frequency,
                         durationInMinutes: duration,
                         isEnabled: schedule?.isEnabled ?? true,
-                        smartSkip: smartSkip,
                         selectedMotors: selectedMotors,
                       );
 
-                      if (schedule == null) {
-                        _service.addSchedule(newSchedule);
-                      } else {
-                        _service.updateSchedule(newSchedule);
+                      try {
+                        if (schedule == null) {
+                          await _service.addSchedule(newSchedule);
+                          _showSuccess("Schedule added successfully to ESP32");
+                        } else {
+                          await _service.updateSchedule(newSchedule);
+                          _showSuccess("Schedule updated successfully on ESP32");
+                        }
+                        if (mounted) Navigator.pop(context);
+                      } catch (e) {
+                        _showError("Failed to save schedule. Check ESP32 WiFi connection.");
                       }
-                      Navigator.pop(context);
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2E7D32),
+                      backgroundColor: AppColors.primary,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                     ),
-                    child: Text(schedule == null ? "Add Schedule" : "Update Schedule", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    child: Text(schedule == null ? "Add Schedule" : "Update Schedule", style: const TextStyle(color: AppColors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -303,41 +292,58 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7F5),
+      backgroundColor: AppColors.background,
       body: Column(
         children: [
           _buildHeaderContent(),
           Expanded(
-            child: _service.schedules.isEmpty
-                ? _buildEmptyState()
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    itemCount: _service.schedules.length,
-                    itemBuilder: (context, index) => _buildScheduleCard(_service.schedules[index]),
-                  ),
+            child: RefreshIndicator(
+              onRefresh: _refreshSchedules,
+              child: _isLoading && _service.schedules.isEmpty
+                  ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                  : _service.schedules.isEmpty
+                      ? _buildEmptyState()
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          itemCount: _service.schedules.length,
+                          itemBuilder: (context, index) => _buildScheduleCard(_service.schedules[index]),
+                        ),
+            ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showScheduleSheet(),
-        backgroundColor: const Color(0xFF2E7D32),
-        icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: const Text("New Schedule", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: AppColors.primary,
+        icon: const Icon(Icons.add_rounded, color: AppColors.white),
+        label: const Text("New Schedule", style: TextStyle(color: AppColors.white, fontWeight: FontWeight.bold)),
       ),
     );
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.calendar_today_outlined, size: 80, color: Colors.grey[300]),
-          const SizedBox(height: 16),
-          Text("No schedules set", style: TextStyle(color: Colors.grey[600], fontSize: 18, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          const Text("Tap 'New Schedule' to get started", style: TextStyle(color: Colors.grey)),
-        ],
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.6,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.calendar_today_outlined, size: 80, color: AppColors.scheduleEmptyIcon),
+              const SizedBox(height: 16),
+              Text("No schedules set", style: TextStyle(color: AppColors.scheduleSubtext, fontSize: 18, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              const Text("Tap 'New Schedule' to get started", style: TextStyle(color: AppColors.grey)),
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: _refreshSchedules,
+                icon: const Icon(Icons.refresh, color: AppColors.primary),
+                label: const Text("Sync with ESP32", style: TextStyle(color: AppColors.primary)),
+              )
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -355,18 +361,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: AppColors.white.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
+                  child: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.white, size: 18),
                 ),
               ),
               const SizedBox(width: 15),
-              const Text("Watering Schedule", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+              const Text("Watering Schedule", style: TextStyle(color: AppColors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              if (_isLoading)
+                const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: AppColors.white, strokeWidth: 2)),
             ],
           ),
           const SizedBox(height: 5),
-          const Text("Automate your irrigation system", style: TextStyle(color: Colors.white70, fontSize: 14)),
+          const Text("Automate your irrigation system via ESP32 WiFi", style: TextStyle(color: Colors.white70, fontSize: 14)),
         ],
       ),
     );
@@ -376,9 +385,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: AppColors.scheduleShadow, blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -391,23 +400,30 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   children: [
                     Container(
                       padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(12)),
-                      child: const Icon(Icons.access_time_filled_rounded, color: Color(0xFF2E7D32), size: 24),
+                      decoration: BoxDecoration(color: AppColors.scheduleIconBg, borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.access_time_filled_rounded, color: AppColors.primary, size: 24),
                     ),
                     const SizedBox(width: 15),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(_formatTimeOfDay(TimeOfDay.fromDateTime(schedule.time)), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                        Text(schedule.frequency, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                        Text(_formatTimeString(schedule.time), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                        Text(schedule.frequency, style: TextStyle(color: AppColors.scheduleSubtext, fontSize: 14)),
                       ],
                     ),
                   ],
                 ),
                 Switch.adaptive(
                   value: schedule.isEnabled,
-                  activeColor: const Color(0xFF2E7D32),
-                  onChanged: (val) => _service.toggleSchedule(schedule.id, val),
+                  activeColor: AppColors.primary,
+                  onChanged: (val) async {
+                    try {
+                      await _service.toggleSchedule(schedule.id, val);
+                      _showSuccess("Schedule ${val ? 'enabled' : 'disabled'} on ESP32");
+                    } catch (e) {
+                      _showError("Failed to toggle schedule");
+                    }
+                  },
                 ),
               ],
             ),
@@ -423,13 +439,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Icon(Icons.timer_outlined, size: 14, color: Colors.grey[500]),
+                          Icon(Icons.timer_outlined, size: 14, color: AppColors.grey.withOpacity(0.5)),
                           const SizedBox(width: 4),
-                          Text("${schedule.durationInMinutes} min", style: TextStyle(color: Colors.grey[500])),
+                          Text("${schedule.durationInMinutes} min", style: TextStyle(color: AppColors.grey.withOpacity(0.5))),
                           const SizedBox(width: 12),
-                          Icon(Icons.settings_input_component_rounded, size: 14, color: Colors.grey[500]),
+                          Icon(Icons.settings_input_component_rounded, size: 14, color: AppColors.grey.withOpacity(0.5)),
                           const SizedBox(width: 4),
-                          Text("${schedule.selectedMotors.length} Motors", style: TextStyle(color: Colors.grey[500])),
+                          Text("${schedule.selectedMotors.length} Motors", style: TextStyle(color: AppColors.grey.withOpacity(0.5))),
                         ],
                       ),
                     ],
@@ -437,8 +453,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ),
                 Row(
                   children: [
-                    IconButton(icon: const Icon(Icons.edit_outlined, color: Color(0xFF2E7D32)), onPressed: () => _showScheduleSheet(schedule: schedule)),
-                    IconButton(icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent), onPressed: () => _showDeleteConfirmation(schedule.id)),
+                    IconButton(icon: const Icon(Icons.edit_outlined, color: AppColors.primary), onPressed: () => _showScheduleSheet(schedule: schedule)),
+                    IconButton(icon: const Icon(Icons.delete_outline_rounded, color: AppColors.scheduleDeleteIcon), onPressed: () => _showDeleteConfirmation(schedule.id)),
                   ],
                 ),
               ],
@@ -454,13 +470,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Delete Schedule"),
-        content: const Text("Are you sure?"),
+        content: const Text("Are you sure? This will permanently remove the schedule from ESP32."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
           ElevatedButton(
-            onPressed: () { _service.deleteSchedule(id); Navigator.pop(context); },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: const Text("DELETE", style: TextStyle(color: Colors.white)),
+            onPressed: () async { 
+              Navigator.pop(context);
+              try {
+                await _service.deleteSchedule(id); 
+                _showSuccess("Schedule deleted from ESP32");
+              } catch (e) {
+                _showError("Failed to delete schedule. Check ESP32 connection.");
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.scheduleDeleteIcon),
+            child: const Text("DELETE", style: TextStyle(color: AppColors.white)),
           ),
         ],
       ),

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/esp32_service.dart';
+import '../Core/theme/app_colors.dart';
 
 class Esp32ConfigScreen extends StatefulWidget {
   @override
@@ -70,11 +71,11 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7F5),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text("ESP32 Auto Connect", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF2E7D32),
-        foregroundColor: Colors.white,
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.white,
         elevation: 0,
       ),
       body: Center(
@@ -90,25 +91,25 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
                 style: TextStyle(
                   fontSize: 24, 
                   fontWeight: FontWeight.bold, 
-                  color: status == "Connected" ? Colors.green : Colors.black87
+                  color: status == "Connected" ? AppColors.esp32Success : AppColors.black87
                 ),
               ),
               const SizedBox(height: 15),
               Text(
                 result,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16, color: Colors.black54),
+                style: const TextStyle(fontSize: 16, color: AppColors.esp32TextGrey),
               ),
               if (discoveredIp != null) ...[
                 const SizedBox(height: 10),
                 Text(
                   "IP: $discoveredIp",
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2E7D32)),
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
                 ),
               ],
               const SizedBox(height: 40),
               if (isLoading)
-                const CircularProgressIndicator(color: Color(0xFF2E7D32))
+                const CircularProgressIndicator(color: AppColors.primary)
               else
                 SizedBox(
                   width: double.infinity,
@@ -121,8 +122,8 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2E7D32),
-                      foregroundColor: Colors.white,
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                     ),
                   ),
@@ -135,12 +136,12 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFF2E7D32)),
+                      side: const BorderSide(color: AppColors.primary),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                     ),
                     child: const Text(
                       "DONE",
-                      style: TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold),
+                      style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
@@ -153,19 +154,19 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
 
   Widget _buildIcon() {
     if (status == "Connected") {
-      return const Icon(Icons.check_circle, size: 100, color: Colors.green);
+      return const Icon(Icons.check_circle, size: 100, color: AppColors.esp32Success);
     } else if (status == "Not Found") {
-      return const Icon(Icons.error_outline, size: 100, color: Colors.redAccent);
+      return const Icon(Icons.error_outline, size: 100, color: AppColors.esp32Error);
     } else {
-      return Stack(
+      return const Stack(
         alignment: Alignment.center,
         children: [
-          const SizedBox(
+          SizedBox(
             width: 120,
             height: 120,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF2E7D32)),
+            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
           ),
-          const Icon(Icons.wifi_find, size: 60, color: Color(0xFF2E7D32)),
+          Icon(Icons.wifi_find, size: 60, color: AppColors.primary),
         ],
       );
     }

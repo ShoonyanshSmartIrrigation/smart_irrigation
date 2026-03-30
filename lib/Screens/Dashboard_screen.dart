@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import '../services/dashboard_service.dart';
 import '../Widgets/build_header.dart';
+import '../Core/theme/app_colors.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Function(int)? onTabRequested;
@@ -26,6 +27,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _service.removeListener(_onServiceUpdate);
+    _service.dispose();
     super.dispose();
   }
 
@@ -47,7 +49,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             return Container(
               padding: const EdgeInsets.only(top: 20, bottom: 30),
               decoration: const BoxDecoration(
-                color: Colors.white,
+                color: AppColors.white,
                 borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(40),
                   topRight: Radius.circular(40),
@@ -73,13 +75,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A1A1A),
+                      color: AppColors.dashboardTextDark,
                     ),
                   ),
                   const SizedBox(height: 8),
                   const Text(
                     "Select how long you want to irrigate",
-                    style: TextStyle(color: Colors.grey, fontSize: 14),
+                    style: TextStyle(color: AppColors.grey, fontSize: 14),
                   ),
                   const SizedBox(height: 30),
                   // Quick Selection Row
@@ -107,10 +109,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 HapticFeedback.mediumImpact();
                               }
                             },
-                            selectedColor: const Color(0xFF2E7D32),
+                            selectedColor: AppColors.primary,
                             backgroundColor: Colors.grey[100],
                             labelStyle: TextStyle(
-                              color: isSelected ? Colors.white : Colors.black87,
+                              color: isSelected ? AppColors.white : Colors.black87,
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                             ),
                             shape: RoundedRectangleBorder(
@@ -136,7 +138,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           height: 55,
                           width: MediaQuery.of(context).size.width * 0.85,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFE8F5E9).withValues(alpha: 0.6),
+                            color: AppColors.dashboardWheelPickerBg.withValues(alpha: 0.6),
                             borderRadius: BorderRadius.circular(18),
                           ),
                         ),
@@ -166,7 +168,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   style: TextStyle(
                                     fontSize: isSelected ? 26 : 20,
                                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                    color: isSelected ? const Color(0xFF2E7D32) : Colors.grey[400],
+                                    color: isSelected ? AppColors.primary : AppColors.grey.withOpacity(0.4),
                                   ),
                                 ),
                               );
@@ -188,8 +190,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Navigator.pop(context);
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2E7D32),
-                          foregroundColor: Colors.white,
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: AppColors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                         ),
@@ -250,7 +252,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7F5),
+      backgroundColor: AppColors.background,
       body: RefreshIndicator(
         onRefresh: () async {
           _service.loadUserData();
@@ -302,7 +304,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Text(
             "WELCOME BACK",
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
+              color: AppColors.white.withValues(alpha: 0.7),
               fontSize: 13,
               fontWeight: FontWeight.w600,
               letterSpacing: 1.5,
@@ -315,7 +317,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Text(
                   displayName,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: AppColors.white,
                     fontSize: 30,
                     fontWeight: FontWeight.bold,
                     letterSpacing: -0.5,
@@ -337,9 +339,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
+        color: AppColors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1),
+        border: Border.all(color: AppColors.white.withValues(alpha: 0.1), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -363,7 +365,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Text(
             _service.connectionStatus,
             style: const TextStyle(
-              color: Colors.white,
+              color: AppColors.white,
               fontWeight: FontWeight.w700,
               fontSize: 10,
               letterSpacing: 0.5,
@@ -382,8 +384,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "MOISTURE",
             "${_service.dataManager.avgMoisture}%",
             Icons.water_drop_rounded,
-            const Color(0xFFE3F2FD),
-            const Color(0xFF1976D2),
+            AppColors.dashboardMoistureBg,
+            AppColors.dashboardMoistureIcon,
             showProgress: true,
             progressValue: _service.dataManager.avgMoisture / 100,
           ),
@@ -394,8 +396,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "HARDWARE",
             "${_service.dataManager.activeMotors}/${_service.dataManager.totalMotors}",
             Icons.developer_board,
-            const Color(0xFFFFF3E0),
-            const Color(0xFFE65100),
+            AppColors.dashboardHardwareBg,
+            AppColors.dashboardHardwareIcon,
             subTitle: "Active Motors",
             onTap: () => widget.onTabRequested?.call(1),
           ),
@@ -408,7 +410,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Widget card = Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 15, offset: const Offset(0, 8))],
       ),
@@ -423,7 +425,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
                 child: Icon(icon, color: iconColor, size: 22),
               ),
-              Text(title, style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+              Text(title, style: const TextStyle(color: AppColors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
             ],
           ),
           const SizedBox(height: 20),
@@ -433,13 +435,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Text(value.split('/').first, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.black87)),
               if (value.contains('/')) ...[
-                Text("/${value.split('/').last}", style: const TextStyle(fontSize: 18, color: Colors.grey, fontWeight: FontWeight.w500)),
+                Text("/${value.split('/').last}", style: const TextStyle(fontSize: 18, color: AppColors.grey, fontWeight: FontWeight.w500)),
               ] else if (value.contains('%')) ...[
                  const Text("%", style: TextStyle(fontSize: 18, color: Colors.blueAccent, fontWeight: FontWeight.bold)),
               ]
             ],
           ),
-          if (subTitle != null) Text(subTitle, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          if (subTitle != null) Text(subTitle, style: const TextStyle(color: AppColors.grey, fontSize: 12)),
           if (showProgress) ...[
             const SizedBox(height: 12),
             ClipRRect(
@@ -463,7 +465,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: (_service.mainPumpError || _service.autoModeError) ? Colors.redAccent : Colors.transparent,
@@ -488,7 +490,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _service.mainPumpError ? Colors.red : Colors.green,
             isError: _service.mainPumpError,
           ),
-          const Padding(padding: EdgeInsets.symmetric(horizontal: 20), child: Divider(height: 1)),
+          const Padding(padding: EdgeInsets.symmetric(horizontal: 20), child: Divider(height: 1, color: AppColors.dashboardDivider)),
           _buildToggleRow(
             "Automatic Mode", 
             _service.autoMode, 
@@ -522,8 +524,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         trailing: Switch(
           value: value,
-          activeThumbColor: Colors.white,
-          activeTrackColor: const Color(0xFF2E7D32),
+          activeThumbColor: AppColors.white,
+          activeTrackColor: AppColors.primary,
           inactiveTrackColor: Colors.grey[300],
           onChanged: onChanged,
         ),
@@ -536,7 +538,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(30)),
+      decoration: BoxDecoration(color: AppColors.dashboardTimerCardBg, borderRadius: BorderRadius.circular(30)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -556,10 +558,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("NEXT CYCLE", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            const Text("NEXT CYCLE", style: TextStyle(color: AppColors.grey, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
             Row(
               children: [
-                const Text("Irrigation Timer", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text("Irrigation Timer", style: TextStyle(color: AppColors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                 if (!isRunning) IconButton(
                   icon: const Icon(Icons.edit_calendar_rounded, color: Colors.green, size: 20),
                   onPressed: _showTimerPicker,
@@ -570,7 +572,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ),
-        Icon(Icons.timer_outlined, color: Colors.white.withValues(alpha: 0.2), size: 32),
+        Icon(Icons.timer_outlined, color: AppColors.white.withValues(alpha: 0.2), size: 32),
       ],
     );
   }
@@ -584,9 +586,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: [
-            Text(_service.getTimerText(), style: const TextStyle(color: Colors.white, fontSize: 50, fontWeight: FontWeight.bold, letterSpacing: 2)),
+            Text(_service.getTimerText(), style: const TextStyle(color: AppColors.white, fontSize: 50, fontWeight: FontWeight.bold, letterSpacing: 2)),
             const SizedBox(width: 8),
-            const Text("min", style: TextStyle(color: Colors.grey, fontSize: 24, fontWeight: FontWeight.w500)),
+            const Text("min", style: TextStyle(color: AppColors.grey, fontSize: 24, fontWeight: FontWeight.w500)),
           ],
         ),
       ),
@@ -597,11 +599,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Row(
       children: [
         Expanded(
-          child: _timerButton(isRunning ? "RUNNING" : "START", isRunning ? const Color(0xFF2E7D32).withValues(alpha: 0.5) : const Color(0xFF2E7D32), isRunning ? () {} : _service.startIrrigationTimer),
+          child: _timerButton(isRunning ? "RUNNING" : "START", isRunning ? AppColors.primary.withValues(alpha: 0.5) : AppColors.primary, isRunning ? () {} : _service.startIrrigationTimer),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: _timerButton("STOP", const Color(0xFF332020), () {
+          child: _timerButton("STOP", AppColors.dashboardStopButtonBg, () {
             _service.stopIrrigationTimer();
             FlutterRingtonePlayer().stop();
           }, textColor: Colors.redAccent),
@@ -610,7 +612,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _timerButton(String label, Color color, VoidCallback onTap, {Color textColor = Colors.white}) {
+  Widget _timerButton(String label, Color color, VoidCallback onTap, {Color textColor = AppColors.white}) {
     return SizedBox(
       height: 55,
       child: ElevatedButton(
@@ -630,7 +632,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4))],
       ),
@@ -640,10 +642,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("WEATHER", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              Text("WEATHER", style: TextStyle(color: AppColors.grey, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
               SizedBox(height: 4),
               Text("Mostly Sunny", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              Text("28°C", style: TextStyle(color: Colors.grey, fontSize: 14)),
+              Text("28°C", style: TextStyle(color: AppColors.grey, fontSize: 14)),
             ],
           ),
           Icon(Icons.wb_sunny_rounded, color: Colors.orange[400], size: 40),

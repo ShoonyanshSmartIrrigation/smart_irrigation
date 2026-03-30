@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../services/auth_service.dart';
 import '../Routes/app_Routes.dart';
 import '../Widgets/build_header.dart';
+import '../Core/theme/app_colors.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -72,13 +74,15 @@ class _LoginScreenState extends State<LoginScreen> {
       if (user != null) {
         showToast("Login Successful!");
         Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
-      } else {
-        showToast("Invalid credentials. Please try again.");
       }
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      showToast(e.message);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      showToast("An error occurred. Please try again later.");
+      showToast("An unexpected error occurred.");
     }
   }
 
@@ -96,12 +100,13 @@ class _LoginScreenState extends State<LoginScreen> {
       if (user != null) {
         showToast("Logged in with Google!");
         Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
-      } else {
-        showToast("Google Sign-In failed.");
       }
+    } on AuthException catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+      showToast(e.message);
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
-      showToast("Google Sign-In error. Try again.");
+      showToast("Google Sign-In failed.");
     }
   }
 
@@ -115,12 +120,10 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!await _checkInternet()) return;
 
     try {
-      bool success = await _authService.sendPasswordResetEmail(email);
-      if (success) {
-        showToast("Password reset link sent to your email");
-      } else {
-        showToast("Error sending reset link. Verify your email.");
-      }
+      await _authService.sendPasswordResetEmail(email);
+      showToast("Password reset link sent to your email");
+    } on AuthException catch (e) {
+      showToast(e.message);
     } catch (e) {
       showToast("Something went wrong. Try again.");
     }
@@ -135,7 +138,7 @@ class _LoginScreenState extends State<LoginScreen> {
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 3),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          backgroundColor: Theme.of(context).primaryColor,
+          backgroundColor: AppColors.primary,
         ),
       );
   }
@@ -143,7 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7F5),
+      backgroundColor: AppColors.loginBackground,
       resizeToAvoidBottomInset: true,
       body: SingleChildScrollView(
         child: Column(
@@ -155,11 +158,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                    decoration: const BoxDecoration(
+                      color: AppColors.loginHeaderIconBg,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.eco_rounded, size: 60, color: Colors.white),
+                    child: const Icon(Icons.eco_rounded, size: 60, color: AppColors.white),
                   ),
                   const SizedBox(height: 15),
                   const Text(
@@ -167,15 +170,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: AppColors.white,
                       letterSpacing: 1.2,
                     ),
                   ),
-                  Text(
+                  const Text(
                     "Sustainable Future Begins Here",
                     style: TextStyle(
                       fontSize: 14,
-                      color: Colors.white.withOpacity(0.8),
+                      color: AppColors.loginSubtitle,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -187,12 +190,12 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
+                  const Text(
                     "Login to your account",
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Theme.of(context).primaryColor,
+                      color: AppColors.primary,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -224,10 +227,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     alignment: Alignment.centerRight,
                     child: TextButton(
                       onPressed: handleForgotPassword,
-                      child: Text(
+                      child: const Text(
                         "Forgot Password?",
                         style: TextStyle(
-                          color: Theme.of(context).primaryColor,
+                          color: AppColors.primary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -237,16 +240,16 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 10),
 
                   _isLoading 
-                  ? Center(child: CircularProgressIndicator(color: Theme.of(context).primaryColor))
+                  ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                   : ElevatedButton(
                     onPressed: handleLogin,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).primaryColor,
-                      foregroundColor: Colors.white,
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                       elevation: 4,
-                      shadowColor: Theme.of(context).primaryColor.withOpacity(0.4),
+                      shadowColor: AppColors.loginButtonShadow,
                     ),
                     child: const Text(
                       "LOGIN",
@@ -261,7 +264,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const Expanded(child: Divider()),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text("OR CONNECT WITH", style: TextStyle(color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.bold)),
+                        child: Text("OR CONNECT WITH", style: const TextStyle(color: AppColors.loginTextGrey, fontSize: 12, fontWeight: FontWeight.bold)),
                       ),
                       const Expanded(child: Divider()),
                     ],
@@ -271,23 +274,19 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   OutlinedButton.icon(
                     onPressed: _isLoading ? null : handleGoogleSignIn,
-                    icon: const Text(
-                      "G",
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue,
-                      ),
+                    icon: SvgPicture.asset(
+                      "assets/svg/google.svg",
+                      height: 24,
                     ),
                     label: const Text(
                       "Continue with Google",
-                      style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 15),
+                      style: TextStyle(color: AppColors.loginGoogleButtonText, fontWeight: FontWeight.w600, fontSize: 15),
                     ),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 15),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      side: BorderSide(color: Colors.grey[300]!, width: 1.5),
-                      backgroundColor: Colors.white,
+                      side: const BorderSide(color: AppColors.loginDivider, width: 1.5),
+                      backgroundColor: AppColors.loginGoogleButtonBg,
                     ),
                   ),
 
@@ -296,12 +295,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text("Don't have an account?", style: TextStyle(color: Colors.grey[700])),
+                      const Text("Don't have an account?", style: TextStyle(color: AppColors.loginTextDarkGrey)),
                       TextButton(
                         onPressed: () => Navigator.pushNamed(context, AppRoutes.signup),
-                        child: Text(
+                        child: const Text(
                           "Sign Up",
-                          style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold, fontSize: 16),
+                          style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 16),
                         ),
                       ),
                     ],
@@ -327,11 +326,11 @@ class _LoginScreenState extends State<LoginScreen> {
   ) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.loginTextFieldBg,
         borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: AppColors.loginShadow,
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -345,11 +344,11 @@ class _LoginScreenState extends State<LoginScreen> {
         style: const TextStyle(fontWeight: FontWeight.w500),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
-          prefixIcon: Icon(icon, color: Theme.of(context).primaryColor, size: 22),
+          labelStyle: const TextStyle(color: AppColors.loginTextGrey, fontSize: 14),
+          prefixIcon: Icon(icon, color: AppColors.primary, size: 22),
           suffixIcon: isPassword 
             ? IconButton(
-                icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+                icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility, color: AppColors.grey),
                 onPressed: onTogglePassword,
               )
             : null,
@@ -358,7 +357,7 @@ class _LoginScreenState extends State<LoginScreen> {
             borderSide: BorderSide.none,
           ),
           filled: true,
-          fillColor: Colors.white,
+          fillColor: AppColors.loginTextFieldBg,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       ),

@@ -1,61 +1,10 @@
-// import 'package:flutter/material.dart';
-// import 'Dashboard_screen.dart';
-// import 'plant_control_screen.dart';
-// import 'schedule_screen.dart';
-// import 'Setting_Screen.dart';
-// import '../Widgets/custom_bottom_nav.dart';
-//
-// class MainScreen extends StatefulWidget {
-//   final int initialIndex;
-//   const MainScreen({Key? key, this.initialIndex = 0}) : super(key: key);
-//
-//   @override
-//   _MainScreenState createState() => _MainScreenState();
-// }
-//
-// class _MainScreenState extends State<MainScreen> {
-//   late int _currentIndex;
-//
-//   @override
-//   void initState() {
-//     super.initState();
-//     _currentIndex = widget.initialIndex;
-//   }
-//
-//   void _onTap(int index) {
-//     setState(() {
-//       _currentIndex = index;
-//     });
-//   }
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     final List<Widget> _screens = [
-//     DashboardScreen(onTabRequested: _onTap),
-//      const PlantControlScreen(),
-//      const ScheduleScreen(),
-//       const SettingsScreen(),
-//     ];
-//
-//     return Scaffold(
-//       body: IndexedStack(
-//         index: _currentIndex,
-//         children: _screens,
-//       ),
-//       bottomNavigationBar: CustomBottomNavBar(
-//         currentIndex: _currentIndex,
-//         onTap: _onTap,
-//       ),
-//     );
-//   }
-// }
-
 import 'package:flutter/material.dart';
 import 'Dashboard_screen.dart';
 import 'plant_control_screen.dart';
 import 'schedule_screen.dart';
 import 'Setting_Screen.dart';
 import '../Widgets/custom_bottom_nav.dart';
+import '../Core/theme/app_colors.dart';
 
 class MainScreen extends StatefulWidget {
   final int initialIndex;
@@ -106,9 +55,12 @@ class _MainScreenState extends State<MainScreen> {
       onWillPop: _onWillPop,
       child: Scaffold(
         body: SafeArea( // ✅ UI safety
-          child: IndexedStack(
-            index: _currentIndex,
-            children: _screens,
+          child: Container(
+            color: AppColors.background,
+            child: IndexedStack(
+              index: _currentIndex,
+              children: _screens,
+            ),
           ),
         ),
         bottomNavigationBar: CustomBottomNavBar(

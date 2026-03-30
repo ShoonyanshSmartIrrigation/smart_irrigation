@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../Routes/app_Routes.dart';
 import '../services/settings_service.dart';
 import '../Widgets/build_header.dart';
+import '../Core/theme/app_colors.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -33,7 +34,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7F5),
+      backgroundColor: AppColors.background,
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -47,10 +48,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white.withOpacity(0.5), width: 3),
+                        border: Border.all(color: AppColors.white.withOpacity(0.5), width: 3),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: AppColors.black.withOpacity(0.1),
                             blurRadius: 10,
                             spreadRadius: 2,
                           )
@@ -58,13 +59,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       child: CircleAvatar(
                         radius: 38,
-                        backgroundColor: Colors.white,
+                        backgroundColor: AppColors.white,
                         child: Text(
                           _service.getInitials(),
                           style: const TextStyle(
                             fontSize: 26,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF2E7D32),
+                            color: AppColors.primary,
                           ),
                         ),
                       ),
@@ -73,7 +74,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Text(
                       _service.userName,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppColors.white,
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 0.5,
@@ -83,7 +84,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Text(
                       _service.userEmail,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.8),
+                        color: AppColors.white.withOpacity(0.8),
                         fontSize: 13,
                         fontWeight: FontWeight.w400,
                       ),
@@ -148,8 +149,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: Icons.logout,
                 title: "Logout",
                 subtitle: "Sign out of your account",
-                iconColor: Colors.redAccent,
-                textColor: Colors.redAccent,
+                iconColor: AppColors.settingsLogoutIcon,
+                textColor: AppColors.settingsLogoutIcon,
                 onTap: _showLogoutDialog,
                 showDivider: false,
               ),
@@ -162,7 +163,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Text(
                     "Smart Irrigation System",
                     style: TextStyle(
-                      color: Colors.grey[600],
+                      color: AppColors.settingsSubtitleGrey,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                     ),
@@ -170,7 +171,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 4),
                   Text(
                     "Version 1.0.0",
-                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    style: TextStyle(color: AppColors.grey.withOpacity(0.5), fontSize: 12),
                   ),
                 ],
               ),
@@ -190,7 +191,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         style: const TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.bold,
-          color: Color(0xFF2E7D32),
+          color: AppColors.settingsSectionText,
           letterSpacing: 1.2,
         ),
       ),
@@ -201,11 +202,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: AppColors.settingsShadow,
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -222,7 +223,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String title,
     required String subtitle,
     required VoidCallback onTap,
-    Color iconColor = const Color(0xFF2E7D32),
+    Color iconColor = AppColors.primary,
     bool showDivider = true,
     Color? textColor,
   }) {
@@ -244,19 +245,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 15,
-              color: textColor ?? Colors.black87,
+              color: textColor ?? AppColors.black87,
             ),
           ),
           subtitle: Text(
             subtitle,
-            style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            style: TextStyle(color: AppColors.settingsSubtitleGrey, fontSize: 13),
           ),
-          trailing: const Icon(Icons.chevron_right, size: 20, color: Colors.grey),
+          trailing: const Icon(Icons.chevron_right, size: 20, color: AppColors.grey),
         ),
         if (showDivider)
           Padding(
             padding: const EdgeInsets.only(left: 70, right: 20),
-            child: Divider(height: 1, color: Colors.grey[100]),
+            child: Divider(height: 1, color: AppColors.settingsDivider),
           ),
       ],
     );
@@ -281,7 +282,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2E7D32),
+              backgroundColor: AppColors.primary,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             onPressed: () {
@@ -293,7 +294,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Enter value between $min and $max")));
               }
             },
-            child: const Text("SAVE", style: TextStyle(color: Colors.white)),
+            child: const Text("SAVE", style: TextStyle(color: AppColors.white)),
           ),
         ],
       ),
@@ -318,7 +319,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2E7D32),
+              backgroundColor: AppColors.primary,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             onPressed: () {
@@ -330,7 +331,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Invalid IP Address")));
               }
             },
-            child: const Text("SAVE", style: TextStyle(color: Colors.white)),
+            child: const Text("SAVE", style: TextStyle(color: AppColors.white)),
           ),
         ],
       ),
@@ -348,14 +349,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
+              backgroundColor: AppColors.settingsLogoutIcon,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             onPressed: () async {
               await _service.logout();
               Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (route) => false);
             },
-            child: const Text("LOGOUT", style: TextStyle(color: Colors.white)),
+            child: const Text("LOGOUT", style: TextStyle(color: AppColors.white)),
           ),
         ],
       ),

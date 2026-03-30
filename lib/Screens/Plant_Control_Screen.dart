@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/plant_service.dart';
+import '../data_manager.dart';
 import '../Widgets/build_header.dart';
+import '../Core/theme/app_colors.dart';
 
 class PlantControlScreen extends StatefulWidget {
   const PlantControlScreen({super.key});
@@ -21,6 +23,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
   @override
   void dispose() {
     _service.removeListener(_onServiceUpdate);
+    _service.dispose();
     super.dispose();
   }
 
@@ -30,17 +33,21 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final plants = _service.getPlants();
+    final totalMotors = plants.length;
+    final activeMotors = _service.getActiveMotors();
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7F5),
+      backgroundColor: AppColors.background,
       floatingActionButton: FloatingActionButton(
         heroTag: 'plant_settings_fab',
-        backgroundColor: const Color(0xFF2E7D32),
+        backgroundColor: AppColors.primary,
         onPressed: () => Navigator.pushNamed(context, '/settings'),
-        child: const Icon(Icons.settings, color: Colors.white),
+        child: const Icon(Icons.settings, color: AppColors.white),
       ),
       body: Column(
         children: [
-          _buildStatsHeader(),
+          _buildStatsHeader(totalMotors, activeMotors),
           const SizedBox(height: 100),
           Expanded(
             child: GridView.builder(
@@ -51,9 +58,9 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                 mainAxisSpacing: 15,
                 childAspectRatio: 0.85,
               ),
-              itemCount: _service.getTotalMotors(),
+              itemCount: totalMotors,
               itemBuilder: (context, index) {
-                final plant = _service.getPlants()[index];
+                final plant = plants[index];
                 return _buildPlantCard(plant);
               },
             ),
@@ -63,7 +70,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
     );
   }
 
-  Widget _buildStatsHeader() {
+  Widget _buildStatsHeader(int totalMotors, int activeMotors) {
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -76,7 +83,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                 children: [
                   const Text(
                     "Plant Control",
-                    style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: AppColors.white, fontSize: 26, fontWeight: FontWeight.bold),
                   ),
                   if (_service.isSyncing || _service.isTogglingAll)
                     const SizedBox(
@@ -110,12 +117,12 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _statItem("TOTAL PLANTS", _service.getTotalMotors().toString(), Icons.grass_rounded),
-                      Container(width: 1, height: 30, color: Colors.grey[200]),
-                      _statItem("ACTIVE", _service.getActiveMotors().toString(), Icons.water_drop_rounded),
+                      _statItem("TOTAL PLANTS", totalMotors.toString(), Icons.grass_rounded),
+                      Container(width: 1, height: 30, color: AppColors.plantControlDivider),
+                      _statItem("ACTIVE", activeMotors.toString(), Icons.water_drop_rounded),
                     ],
                   ),
-                  const Divider(height: 30),
+                  const Divider(height: 30, color: AppColors.plantControlDivider),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -126,7 +133,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                             Text(
                               "MASTER CONTROLS",
                               style: TextStyle(
-                                color: _service.allMotorsError ? Colors.red : Colors.black87,
+                                color: _service.allMotorsError ? AppColors.plantControlError : AppColors.black87,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 14,
                                 letterSpacing: 0.5,
@@ -135,7 +142,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                             if (_service.allMotorsError)
                               const Text(
                                 "CONNECTION FAILED",
-                                style: TextStyle(color: Colors.red, fontSize: 11),
+                                style: TextStyle(color: AppColors.plantControlError, fontSize: 11),
                               ),
                           ],
                         ),
@@ -145,8 +152,8 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                           ElevatedButton(
                             onPressed: _service.isTogglingAll ? null : () => _service.toggleAllMotors(true),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF2E7D32),
-                              foregroundColor: Colors.white,
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: AppColors.white,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
                             child: const Text("Start"),
@@ -155,8 +162,8 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                           ElevatedButton(
                             onPressed: _service.isTogglingAll ? null : () => _service.toggleAllMotors(false),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
+                              backgroundColor: AppColors.plantControlError,
+                              foregroundColor: AppColors.white,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
                             child: const Text("Stop"),
@@ -177,30 +184,32 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
   Widget _statItem(String label, String value, IconData icon) {
     return Column(
       children: [
-        Icon(icon, color: Colors.grey[400], size: 20),
+        Icon(icon, color: AppColors.plantControlIconGrey, size: 20),
         const SizedBox(height: 5),
         Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 10, fontWeight: FontWeight.bold)),
+        Text(label, style: const TextStyle(color: AppColors.plantControlLabelGrey, fontSize: 10, fontWeight: FontWeight.bold)),
       ],
     );
   }
 
-  Widget _buildPlantCard(dynamic plant) {
+  Widget _buildPlantCard(Plant plant) {
     bool hasError = _service.plantConnectionErrors[plant.id] ?? false;
-    Color moistureColor = plant.moistureLevel < 30 ? Colors.red : (plant.moistureLevel < 60 ? Colors.orange : Colors.green);
+    Color moistureColor = plant.moistureLevel < 30 
+        ? AppColors.plantControlMoistureLow 
+        : (plant.moistureLevel < 60 ? AppColors.plantControlMoistureMedium : AppColors.plantControlMoistureHigh);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: hasError ? Colors.redAccent : Colors.transparent,
+          color: hasError ? AppColors.plantControlError : Colors.transparent,
           width: 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: hasError ? Colors.red.withValues(alpha: 0.2) : Colors.black.withValues(alpha: 0.05),
+            color: hasError ? AppColors.plantControlError.withValues(alpha: 0.2) : Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 5),
           )
@@ -216,16 +225,16 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
               children: [
                 CircleAvatar(
                   backgroundColor: hasError
-                      ? Colors.red[50]
-                      : (plant.isMotorOn ? const Color(0xFFE8F5E9) : Colors.grey[100]),
+                      ? AppColors.plantControlError.withOpacity(0.1)
+                      : (plant.isMotorOn ? AppColors.plantControlIconBg : AppColors.background),
                   radius: 18,
                   child: Icon(
                     hasError ? Icons.wifi_off_rounded : Icons.grass,
-                    color: hasError ? Colors.red : (plant.isMotorOn ? const Color(0xFF2E7D32) : Colors.grey),
+                    color: hasError ? AppColors.plantControlError : (plant.isMotorOn ? AppColors.primary : AppColors.grey),
                     size: 18,
                   ),
                 ),
-                Text("#${plant.id}", style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
+                Text("#${plant.id}", style: const TextStyle(color: AppColors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
               ],
             ),
             Column(
@@ -239,7 +248,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
               children: [
                 Switch.adaptive(
                   value: plant.isMotorOn,
-                  activeColor: const Color(0xFF2E7D32),
+                  activeColor: AppColors.primary,
                   onChanged: _service.isTogglingAll ? null : (_) => _service.togglePlantMotor(plant),
                 ),
                 Text(
@@ -248,7 +257,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1,
-                    color: hasError ? Colors.red : (plant.isMotorOn ? Colors.green : Colors.grey),
+                    color: hasError ? AppColors.plantControlError : (plant.isMotorOn ? AppColors.plantControlActive : AppColors.plantControlInactive),
                   ),
                 ),
               ],

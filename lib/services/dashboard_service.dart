@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../data_manager.dart';
 import 'esp32_service.dart';
 
@@ -19,6 +20,7 @@ class DashboardService extends ChangeNotifier {
 
   final DataManager _dataManager = DataManager();
   final Esp32Service _esp32Service = Esp32Service();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   late SharedPreferences _prefs;
 
   // State
@@ -48,14 +50,15 @@ class DashboardService extends ChangeNotifier {
   VoidCallback? onIrrigationComplete;
 
   Future<void> init() async {
-    if (_isInitialized) return;
-    
     try {
       _prefs = await SharedPreferences.getInstance();
       await loadUserData();
-      _setupConnectivityListener();
-      _startPeriodicTasks();
-      _isInitialized = true;
+      
+      if (!_isInitialized) {
+        _setupConnectivityListener();
+        _startPeriodicTasks();
+        _isInitialized = true;
+      }
     } catch (e) {
       debugPrint("DashboardService Init Error: $e");
     }
@@ -86,10 +89,17 @@ class DashboardService extends ChangeNotifier {
 
   Future<void> loadUserData() async {
     try {
-      final name = _prefs.getString('userName') ?? "Farmer James";
-      _updateState(() => userName = name);
+      // 🔴 FIX: Using FlutterSecureStorage to get the real name, matching AuthService & SettingsService
+      final name = await _secureStorage.read(key: 'userName');
+      if (name != null && name.isNotEmpty) {
+        _updateState(() => userName = name);
+      } else {
+        // Fallback to SharedPreferences if secure storage is empty
+        final legacyName = _prefs.getString('userName') ?? "Farmer";
+        _updateState(() => userName = legacyName);
+      }
     } catch (e) {
-      debugPrint("Error fetching username: $e");
+      debugPrint("Error fetching username in DashboardService: $e");
     }
   }
 
@@ -202,7 +212,6 @@ class DashboardService extends ChangeNotifier {
   }
 
   void startIrrigationTimer() {
-    // Production Fix: Always reset explicitly to avoid inconsistent time if changed mid-run
     _updateState(() => timerSeconds = selectedMinutes * 60);
     
     _irrigationTimer?.cancel();

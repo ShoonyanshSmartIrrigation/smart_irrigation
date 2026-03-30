@@ -1,15 +1,15 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class WateringSchedule {
   final String id;
-  final DateTime time;
+  final String time; // HH:mm format
   final String title;
   final String frequency;
   final int durationInMinutes;
-  bool isEnabled;
-  final bool smartSkip;
+  final bool isEnabled;
   final List<int> selectedMotors;
 
   WateringSchedule({
@@ -19,44 +19,38 @@ class WateringSchedule {
     required this.frequency,
     required this.durationInMinutes,
     required this.isEnabled,
-    required this.smartSkip,
     required this.selectedMotors,
   });
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'time': time.toIso8601String(),
+        'time': time,
         'title': title,
         'frequency': frequency,
         'durationInMinutes': durationInMinutes,
         'isEnabled': isEnabled,
-        'smartSkip': smartSkip,
         'selectedMotors': selectedMotors,
       };
 
   factory WateringSchedule.fromJson(Map<String, dynamic> json) {
     return WateringSchedule(
-      id: json['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      time: json['time'] != null 
-          ? DateTime.parse(json['time']) 
-          : DateTime.now(),
+      id: json['id']?.toString() ?? '',
+      time: json['time'] ?? '08:00',
       title: json['title'] ?? 'Watering Task',
       frequency: json['frequency'] ?? 'Daily',
       durationInMinutes: json['durationInMinutes'] ?? 10,
-      isEnabled: json['isEnabled'] ?? true,
-      smartSkip: json['smartSkip'] ?? true,
+      isEnabled: json['isEnabled'] == true || json['isEnabled'] == 1,
       selectedMotors: List<int>.from(json['selectedMotors'] ?? []),
     );
   }
 
   WateringSchedule copyWith({
     String? id,
-    DateTime? time,
+    String? time,
     String? title,
     String? frequency,
     int? durationInMinutes,
     bool? isEnabled,
-    bool? smartSkip,
     List<int>? selectedMotors,
   }) {
     return WateringSchedule(
@@ -66,7 +60,6 @@ class WateringSchedule {
       frequency: frequency ?? this.frequency,
       durationInMinutes: durationInMinutes ?? this.durationInMinutes,
       isEnabled: isEnabled ?? this.isEnabled,
-      smartSkip: smartSkip ?? this.smartSkip,
       selectedMotors: selectedMotors ?? this.selectedMotors,
     );
   }
@@ -77,89 +70,109 @@ class ScheduleService extends ChangeNotifier {
   factory ScheduleService() => _instance;
   ScheduleService._internal();
 
-  static const String _storageKey = 'watering_schedules';
-  late SharedPreferences _prefs;
-  bool _isInitialized = false;
   List<WateringSchedule> _schedules = [];
-
   List<WateringSchedule> get schedules => _schedules;
 
-  Future<void> init() async {
-    if (_isInitialized) return;
+  Future<String?> _getBaseUrl() async {
     try {
-      _prefs = await SharedPreferences.getInstance();
-      await loadSchedules();
-      _isInitialized = true;
+      final prefs = await SharedPreferences.getInstance();
+      String? ip = prefs.getString("esp_ip");
+      if (ip == null || ip.isEmpty) return null;
+      return "http://$ip";
     } catch (e) {
-      debugPrint("ScheduleService Init Error: $e");
+      return null;
     }
   }
 
-  Future<List<WateringSchedule>> loadSchedules() async {
-    final String? schedulesJson = _prefs.getString(_storageKey);
-    if (schedulesJson != null) {
-      try {
-        final List<dynamic> decoded = jsonDecode(schedulesJson);
-        _schedules = decoded.map((item) => WateringSchedule.fromJson(item)).toList();
-      } catch (e) {
-        debugPrint("Error decoding schedules: $e");
-        _schedules = _getDefaultSchedules();
+  Future<void> fetchSchedules() async {
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) throw Exception("ESP32 IP not configured");
+
+    try {
+      final response = await http
+          .get(Uri.parse("$baseUrl/schedule"))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        _schedules = data.map((item) => WateringSchedule.fromJson(item)).toList();
+        notifyListeners();
+      } else {
+        throw Exception("Failed to load schedules: ${response.statusCode}");
       }
-    } else {
-      _schedules = _getDefaultSchedules();
-    }
-    notifyListeners();
-    return _schedules;
-  }
-
-  List<WateringSchedule> _getDefaultSchedules() {
-    return [
-      WateringSchedule(
-        id: "default_1",
-        time: DateTime.now(),
-        title: "Morning Hydration",
-        frequency: "Daily",
-        durationInMinutes: 15,
-        isEnabled: true,
-        smartSkip: true,
-        selectedMotors: [1],
-      ),
-    ];
-  }
-
-  Future<void> _persistSchedules() async {
-    try {
-      final String encoded = jsonEncode(_schedules.map((s) => s.toJson()).toList());
-      await _prefs.setString(_storageKey, encoded);
-      notifyListeners();
     } catch (e) {
-      debugPrint("Error saving schedules: $e");
+      debugPrint("ScheduleService Fetch Error: $e");
+      rethrow;
     }
   }
 
   Future<void> addSchedule(WateringSchedule schedule) async {
-    _schedules.add(schedule);
-    await _persistSchedules();
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) throw Exception("ESP32 IP not configured");
+
+    try {
+      final response = await http.post(
+        Uri.parse("$baseUrl/schedule"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(schedule.toJson()),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        await fetchSchedules();
+      } else {
+        throw Exception("Failed to add schedule: ${response.statusCode}");
+      }
+    } catch (e) {
+      debugPrint("ScheduleService Add Error: $e");
+      rethrow;
+    }
   }
 
-  Future<void> updateSchedule(WateringSchedule updatedSchedule) async {
-    int index = _schedules.indexWhere((s) => s.id == updatedSchedule.id);
-    if (index != -1) {
-      _schedules[index] = updatedSchedule;
-      await _persistSchedules();
+  Future<void> updateSchedule(WateringSchedule schedule) async {
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) throw Exception("ESP32 IP not configured");
+
+    try {
+      final response = await http.put(
+        Uri.parse("$baseUrl/schedule"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(schedule.toJson()),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        await fetchSchedules();
+      } else {
+        throw Exception("Failed to update schedule: ${response.statusCode}");
+      }
+    } catch (e) {
+      debugPrint("ScheduleService Update Error: $e");
+      rethrow;
     }
   }
 
   Future<void> deleteSchedule(String id) async {
-    _schedules.removeWhere((s) => s.id == id);
-    await _persistSchedules();
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) throw Exception("ESP32 IP not configured");
+
+    try {
+      final response = await http
+          .delete(Uri.parse("$baseUrl/schedule?id=$id"))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        await fetchSchedules();
+      } else {
+        throw Exception("Failed to delete schedule: ${response.statusCode}");
+      }
+    } catch (e) {
+      debugPrint("ScheduleService Delete Error: $e");
+      rethrow;
+    }
   }
 
-  Future<void> toggleSchedule(String id, bool isEnabled) async {
-    int index = _schedules.indexWhere((s) => s.id == id);
-    if (index != -1) {
-      _schedules[index].isEnabled = isEnabled;
-      await _persistSchedules();
-    }
+  Future<void> toggleSchedule(String id, bool enabled) async {
+    final schedule = _schedules.firstWhere((s) => s.id == id);
+    final updated = schedule.copyWith(isEnabled: enabled);
+    await updateSchedule(updated);
   }
 }
