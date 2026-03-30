@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../services/esp32_config_service.dart';
+import '../services/esp32_service.dart';
 
 class Esp32ConfigScreen extends StatefulWidget {
   @override
@@ -8,7 +8,7 @@ class Esp32ConfigScreen extends StatefulWidget {
 }
 
 class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
-  final Esp32ConfigService _configService = Esp32ConfigService();
+  final Esp32Service _esp32Service = Esp32Service();
   String status = "Checking...";
   String result = "Verifying current status...";
   bool isLoading = false;
@@ -27,7 +27,7 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
       isLoading = true;
     });
 
-    bool isConnected = await _configService.checkInitialStatus();
+    bool isConnected = await _esp32Service.checkInitialStatus();
     if (isConnected) {
       if (mounted) {
         setState(() {
@@ -50,7 +50,7 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
       discoveredIp = null;
     });
 
-    String? ip = await _configService.startAutoDiscovery();
+    String? ip = await _esp32Service.startAutoDiscovery();
 
     if (mounted) {
       setState(() {

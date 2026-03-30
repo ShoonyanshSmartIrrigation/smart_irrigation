@@ -11,14 +11,17 @@ class PlantService extends ChangeNotifier {
   PlantService._internal();
 
   final DataManager _dataManager = DataManager();
-
+  
   // State
   bool isSyncing = false;
   bool isTogglingAll = false;
   bool allMotorsError = false;
+  DateTime? lastUpdated;
   final Map<int, bool> plantConnectionErrors = {};
+  final Map<int, bool> _isProcessingToggle = {};
   
   Timer? _syncTimer;
+  bool _isDisposed = false;
 
   void init() {
     startSync();
@@ -26,14 +29,22 @@ class PlantService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _syncTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (!_isDisposed) {
+      super.notifyListeners();
+    }
   }
 
   void startSync() {
     fetchMoistureData();
     _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _syncTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       fetchMoistureData();
     });
   }
@@ -42,15 +53,24 @@ class PlantService extends ChangeNotifier {
     _syncTimer?.cancel();
   }
 
-  // Fetch moisture data from ESP32
-  Future<bool> fetchMoistureData() async {
-    if (isSyncing) return false;
+  Future<String?> _getBaseUrl() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      String? ip = prefs.getString("esp_ip");
+      int port = prefs.getInt("esp_port") ?? 80;
+      if (ip == null || ip.isEmpty) return null;
+      return "http://$ip:$port";
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Fetch moisture data from ESP32 with Retry Strategy
+  Future<bool> fetchMoistureData({int retry = 2}) async {
+    if (isSyncing || _isDisposed) return false;
     
-    final prefs = await SharedPreferences.getInstance();
-    String? ip = prefs.getString("esp_ip");
-    int port = prefs.getInt("esp_port") ?? 80;
-    
-    if (ip == null || ip.isEmpty) {
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) {
       debugPrint("Moisture Sync: No ESP32 IP configured.");
       return false;
     }
@@ -60,23 +80,37 @@ class PlantService extends ChangeNotifier {
 
     try {
       final res = await http
-          .get(Uri.parse("http://$ip:$port/api/moisture"))
-          .timeout(const Duration(seconds: 3));
+          .get(Uri.parse("$baseUrl/api/moisture"))
+          .timeout(const Duration(seconds: 5));
       
       if (res.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(res.body);
+        bool changed = false;
+
         for (var plant in _dataManager.plants) {
           String sensorKey = "sensor_${plant.id}";
           if (data.containsKey(sensorKey)) {
-            plant.moistureLevel = data[sensorKey]["percent"];
+            int newMoisture = data[sensorKey]?["percent"] ?? plant.moistureLevel;
+            if (plant.moistureLevel != newMoisture) {
+              plant.moistureLevel = newMoisture;
+              changed = true;
+            }
           }
         }
+        
+        lastUpdated = DateTime.now();
         isSyncing = false;
-        notifyListeners();
+        notifyListeners(); // Notify once after all updates
         return true;
+      } else {
+        throw Exception("Server Error: ${res.statusCode}");
       }
     } catch (e) {
-      // Error handled silently for periodic sync
+      debugPrint("Moisture Sync Attempt Failed: $e");
+      if (retry > 0 && !_isDisposed) {
+        isSyncing = false; // Reset to allow retry
+        return fetchMoistureData(retry: retry - 1);
+      }
     } finally {
       isSyncing = false;
       notifyListeners();
@@ -84,51 +118,67 @@ class PlantService extends ChangeNotifier {
     return false;
   }
 
-  // Individual motor control
+  // Individual motor control with Debounce
   Future<bool> togglePlantMotor(Plant plant, {bool? isOn}) async {
+    if (_isProcessingToggle[plant.id] == true || _isDisposed) return false;
+    
+    _isProcessingToggle[plant.id] = true;
     bool targetState = isOn ?? !plant.isMotorOn;
-    bool success = await _dataManager.togglePlantMotorApi(plant.id, targetState);
+    
+    notifyListeners();
 
-    if (success) {
-      plantConnectionErrors[plant.id] = false;
-    } else {
-      // If connection fails, force the motor status to OFF in the app
-      plant.isMotorOn = false;
-      plantConnectionErrors[plant.id] = true;
+    try {
+      bool success = await _dataManager.togglePlantMotorApi(plant.id, targetState)
+          .timeout(const Duration(seconds: 5));
 
-      // Automatically clear the error highlight after 3 seconds
-      Timer(const Duration(seconds: 3), () {
+      if (success) {
+        plantConnectionErrors[plant.id] = false;
+      } else {
+        _handlePlantError(plant);
+      }
+      return success;
+    } catch (e) {
+      _handlePlantError(plant);
+      return false;
+    } finally {
+      _isProcessingToggle[plant.id] = false;
+      notifyListeners();
+    }
+  }
+
+  void _handlePlantError(Plant plant) {
+    plant.isMotorOn = false; // Safe fallback
+    plantConnectionErrors[plant.id] = true;
+
+    // Auto-clear error after 3s
+    Timer(const Duration(seconds: 3), () {
+      if (!_isDisposed) {
         plantConnectionErrors[plant.id] = false;
         notifyListeners();
-      });
-    }
-    notifyListeners();
-    return success;
+      }
+    });
   }
 
   // Master toggle for all motors
   Future<void> toggleAllMotors(bool value) async {
+    if (isTogglingAll || _isDisposed) return;
+    
     isTogglingAll = true;
     allMotorsError = false;
     notifyListeners();
 
-    final prefs = await SharedPreferences.getInstance();
-    String? ip = prefs.getString("esp_ip");
-    int port = prefs.getInt("esp_port") ?? 80;
-
-    if (ip == null || ip.isEmpty) {
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) {
       isTogglingAll = false;
       allMotorsError = true;
       notifyListeners();
       return;
     }
 
-    String url = "http://$ip:$port${value ? "/api/all/on" : "/api/all/off"}";
-
     try {
       final response = await http
-          .post(Uri.parse(url))
-          .timeout(const Duration(seconds: 5));
+          .post(Uri.parse("$baseUrl/api/all/${value ? 'on' : 'off'}"))
+          .timeout(const Duration(seconds: 7));
 
       if (response.statusCode == 200) {
         for (var plant in _dataManager.plants) {

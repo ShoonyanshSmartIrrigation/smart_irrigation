@@ -47,10 +47,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 3),
+                        border: Border.all(color: Colors.white.withOpacity(0.5), width: 3),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
+                            color: Colors.black.withOpacity(0.1),
                             blurRadius: 10,
                             spreadRadius: 2,
                           )
@@ -83,7 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Text(
                       _service.userEmail,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.8),
+                        color: Colors.white.withOpacity(0.8),
                         fontSize: 13,
                         fontWeight: FontWeight.w400,
                       ),
@@ -93,70 +93,86 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
 
+            const SizedBox(height: 10),
+            
             _buildSectionHeader("Irrigation Thresholds"),
-            _buildSettingCard(
-              icon: Icons.water_drop_outlined,
-              title: "Minimum Moisture",
-              subtitle: "${_service.minMoisture}%",
-              onTap: () => _showMoistureDialog(
-                "Set Minimum Moisture", 
-                _service.minMoisture, 
-                0, 
-                _service.maxMoisture - 1, 
-                (val) => _service.updateSetting("min_moisture", val)
-              ),
-            ),
-            _buildSettingCard(
-              icon: Icons.waves,
-              title: "Maximum Moisture",
-              subtitle: "${_service.maxMoisture}%",
-              onTap: () => _showMoistureDialog(
-                "Set Maximum Moisture", 
-                _service.maxMoisture, 
-                _service.minMoisture + 1, 
-                100, 
-                (val) => _service.updateSetting("max_moisture", val)
-              ),
-            ),
-            
-            _buildSectionHeader("System Configuration"),
-            _buildSettingCard(
-              icon: Icons.settings_ethernet,
-              title: "ESP32 IP Address",
-              subtitle: _service.esp32Ip,
-              onTap: _showIpDialog,
-            ),
-            
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: ElevatedButton.icon(
-                onPressed: () => Navigator.pushNamed(context, '/esp32Config'),
-                icon: const Icon(Icons.wifi_find),
-                label: const Text("AUTO DISCOVERY CONFIG"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange[800],
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 55),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                  elevation: 2,
+            _buildSettingsGroup([
+              _buildSettingItem(
+                icon: Icons.water_drop_outlined,
+                title: "Minimum Moisture",
+                subtitle: "${_service.minMoisture}%",
+                onTap: () => _showMoistureDialog(
+                  "Set Minimum Moisture", 
+                  _service.minMoisture, 
+                  0, 
+                  _service.maxMoisture - 1, 
+                  (val) => _service.updateSetting("min_moisture", val)
                 ),
               ),
-            ),
+              _buildSettingItem(
+                icon: Icons.waves,
+                title: "Maximum Moisture",
+                subtitle: "${_service.maxMoisture}%",
+                onTap: () => _showMoistureDialog(
+                  "Set Maximum Moisture", 
+                  _service.maxMoisture, 
+                  _service.minMoisture + 1, 
+                  100, 
+                  (val) => _service.updateSetting("max_moisture", val)
+                ),
+                showDivider: false,
+              ),
+            ]),
             
+            _buildSectionHeader("System Configuration"),
+            _buildSettingsGroup([
+              _buildSettingItem(
+                icon: Icons.settings_ethernet,
+                title: "ESP32 IP Address",
+                subtitle: _service.esp32Ip,
+                onTap: _showIpDialog,
+              ),
+              _buildSettingItem(
+                icon: Icons.wifi_find,
+                title: "Auto Discovery",
+                subtitle: "Find ESP32 on local network",
+                onTap: () => Navigator.pushNamed(context, '/esp32Config'),
+                iconColor: Colors.orange[800]!,
+                showDivider: false,
+              ),
+            ]),
+
             _buildSectionHeader("Account & System"),
-            _buildSettingCard(
-              icon: Icons.logout,
-              title: "Logout",
-              subtitle: "Sign out of your account",
-              color: Colors.redAccent,
-              onTap: _showLogoutDialog,
-            ),
+            _buildSettingsGroup([
+              _buildSettingItem(
+                icon: Icons.logout,
+                title: "Logout",
+                subtitle: "Sign out of your account",
+                iconColor: Colors.redAccent,
+                textColor: Colors.redAccent,
+                onTap: _showLogoutDialog,
+                showDivider: false,
+              ),
+            ]),
+            
             const SizedBox(height: 40),
             Center(
-              child: Text(
-                "Version 1.0.0",
-                style: TextStyle(color: Colors.grey[500], fontSize: 12),
+              child: Column(
+                children: [
+                  Text(
+                    "Smart Irrigation System",
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Version 1.0.0",
+                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 100), // Extra space for bottom nav
@@ -168,7 +184,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(25, 25, 25, 10),
+      padding: const EdgeInsets.fromLTRB(25, 20, 25, 10),
       child: Text(
         title.toUpperCase(),
         style: const TextStyle(
@@ -181,33 +197,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSettingCard({
+  Widget _buildSettingsGroup(List<Widget> items) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: items,
+      ),
+    );
+  }
+
+  Widget _buildSettingItem({
     required IconData icon,
     required String title,
     required String subtitle,
     required VoidCallback onTap,
-    Color color = const Color(0xFF2E7D32),
+    Color iconColor = const Color(0xFF2E7D32),
+    bool showDivider = true,
+    Color? textColor,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
-      child: Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        child: ListTile(
+    return Column(
+      children: [
+        ListTile(
           onTap: onTap,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
           leading: Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
+              color: iconColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: color, size: 22),
+            child: Icon(icon, color: iconColor, size: 22),
           ),
-          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-          subtitle: Text(subtitle, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+          title: Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+              color: textColor ?? Colors.black87,
+            ),
+          ),
+          subtitle: Text(
+            subtitle,
+            style: TextStyle(color: Colors.grey[600], fontSize: 13),
+          ),
           trailing: const Icon(Icons.chevron_right, size: 20, color: Colors.grey),
         ),
-      ),
+        if (showDivider)
+          Padding(
+            padding: const EdgeInsets.only(left: 70, right: 20),
+            child: Divider(height: 1, color: Colors.grey[100]),
+          ),
+      ],
     );
   }
 
@@ -229,7 +280,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7D32)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2E7D32),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
             onPressed: () {
               int? value = int.tryParse(controller.text);
               if (value != null && value >= min && value <= max) {
@@ -255,12 +309,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text("ESP32 IP Address"),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(hintText: "e.g. 192.168.1.15", border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+            hintText: "e.g. 192.168.1.15", 
+            border: OutlineInputBorder(),
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7D32)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2E7D32),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
             onPressed: () {
               String value = controller.text.trim();
               if (_service.isValidIp(value)) {
@@ -287,7 +347,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
             onPressed: () async {
               await _service.logout();
               Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (route) => false);

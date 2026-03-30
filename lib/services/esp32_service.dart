@@ -9,6 +9,7 @@ class Esp32Service {
   factory Esp32Service() => _instance;
   Esp32Service._internal();
 
+  // Connection Checking
   Future<bool> checkConnection() async {
     final prefs = await SharedPreferences.getInstance();
     String? ip = prefs.getString("esp_ip");
@@ -25,6 +26,7 @@ class Esp32Service {
     }
   }
 
+  // Motor Controls
   Future<bool> toggleMainMotor(bool isOn) async {
     final prefs = await SharedPreferences.getInstance();
     String? ip = prefs.getString("esp_ip");
@@ -57,6 +59,34 @@ class Esp32Service {
     }
   }
 
+  // Configuration & Discovery Logic (Moved from Esp32ConfigService)
+  Future<bool> checkInitialStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? savedIp = prefs.getString("esp_ip");
+    int savedPort = prefs.getInt("esp_port") ?? 80;
+
+    if (savedIp != null && savedIp.isNotEmpty) {
+      return await verifyConnection(savedIp, savedPort);
+    }
+    return false;
+  }
+
+  Future<String?> startAutoDiscovery() async {
+    // 1. Try mDNS first
+    String? ip = await discoverViaMDNS();
+    if (ip != null) return ip;
+
+    // 2. Fallback to Subnet Scan
+    return await discoverViaIPScan();
+  }
+
+  Future<void> saveConfig(String ip, int port) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString("esp_ip", ip);
+    await prefs.setInt("esp_port", port);
+  }
+
+  // Helper Discovery Methods
   Future<String?> discoverViaMDNS() async {
     final MDnsClient client = MDnsClient();
     try {
@@ -103,9 +133,7 @@ class Esp32Service {
       final res = await http.get(Uri.parse("http://$ip:$port/api/system/status"))
           .timeout(const Duration(milliseconds: 1500));
       if (res.statusCode == 200) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString("esp_ip", ip);
-        await prefs.setInt("esp_port", port);
+        await saveConfig(ip, port);
         return true;
       }
     } catch (_) {}

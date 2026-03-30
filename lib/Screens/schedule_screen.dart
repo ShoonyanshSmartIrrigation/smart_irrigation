@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/schedule_service.dart';
 import '../services/plant_service.dart';
-import '../data_manager.dart'; // Needed for Plant type
 import '../Widgets/build_header.dart';
 
 class ScheduleScreen extends StatefulWidget {
@@ -13,25 +12,23 @@ class ScheduleScreen extends StatefulWidget {
 }
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
-  final ScheduleService _scheduleService = ScheduleService();
+  final ScheduleService _service = ScheduleService();
   final PlantService _plantService = PlantService();
-  List<WateringSchedule> schedules = [];
-  bool isLoading = true;
   Timer? _checkTimer;
 
   @override
   void initState() {
     super.initState();
-    _plantService.init(); // Initialize the service (starts syncing)
-    _plantService.addListener(_onServiceUpdate);
-    _loadSchedules();
+    _plantService.init();
+    _service.init();
+    _service.addListener(_onServiceUpdate);
     _startScheduleChecker();
   }
 
   @override
   void dispose() {
     _checkTimer?.cancel();
-    _plantService.removeListener(_onServiceUpdate);
+    _service.removeListener(_onServiceUpdate);
     super.dispose();
   }
 
@@ -49,8 +46,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     final now = TimeOfDay.now();
     final nowStr = _formatTimeOfDay(now);
 
-    for (var schedule in schedules) {
-      if (schedule.isEnabled && schedule.time == nowStr) {
+    for (var schedule in _service.schedules) {
+      if (schedule.isEnabled && _formatTimeOfDay(TimeOfDay.fromDateTime(schedule.time)) == nowStr) {
         _runSchedule(schedule);
       }
     }
@@ -59,7 +56,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Future<void> _runSchedule(WateringSchedule schedule) async {
     final plants = _plantService.getPlants();
     
-    // 1. Turn ON the selected motors
     for (int motorId in schedule.selectedMotors) {
       try {
         final plant = plants.firstWhere((p) => p.id == motorId);
@@ -69,11 +65,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       }
     }
 
-    // 2. Wait for the duration
-    int durationMinutes = int.tryParse(schedule.duration.split(' ')[0]) ?? 10;
-    
-    Timer(Duration(minutes: durationMinutes), () async {
-      // 3. Turn OFF the selected motors after duration is complete
+    Timer(Duration(minutes: schedule.durationInMinutes), () async {
       for (int motorId in schedule.selectedMotors) {
         try {
           final plant = plants.firstWhere((p) => p.id == motorId);
@@ -82,7 +74,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           debugPrint("Schedule Error: Plant $motorId not found");
         }
       }
-      
       _showCompletionNotification(schedule);
     });
   }
@@ -98,20 +89,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  Future<void> _loadSchedules() async {
-    final loadedSchedules = await _scheduleService.loadSchedules();
-    if (mounted) {
-      setState(() {
-        schedules = loadedSchedules;
-        isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _saveSchedules() async {
-    await _scheduleService.saveSchedules(schedules);
-  }
-
   String _formatTimeOfDay(TimeOfDay tod) {
     final hour = tod.hourOfPeriod == 0 ? 12 : tod.hourOfPeriod;
     final period = tod.period == DayPeriod.am ? 'AM' : 'PM';
@@ -119,33 +96,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return "${hour.toString().padLeft(2, '0')}:$minute $period";
   }
 
-  TimeOfDay _parseTimeOfDay(String timeStr) {
-    try {
-      final parts = timeStr.split(' ');
-      final timeParts = parts[0].split(':');
-      int hour = int.parse(timeParts[0]);
-      final int minute = int.parse(timeParts[1]);
-      final String period = parts[1];
-
-      if (period == 'PM' && hour != 12) hour += 12;
-      if (period == 'AM' && hour == 12) hour = 0;
-
-      return TimeOfDay(hour: hour, minute: minute);
-    } catch (e) {
-      return TimeOfDay.now();
-    }
-  }
-
   String _truncateText(String text, int maxLength) {
     if (text.length <= maxLength) return text;
     return "${text.substring(0, maxLength)}..";
   }
 
-  void _showScheduleSheet({WateringSchedule? schedule, int? index}) {
+  void _showScheduleSheet({WateringSchedule? schedule}) {
     String title = schedule?.title ?? "";
     String frequency = schedule?.frequency ?? "Daily";
-    String duration = schedule?.duration ?? "10 mins";
-    TimeOfDay selectedTime = schedule != null ? _parseTimeOfDay(schedule.time) : TimeOfDay.now();
+    int duration = schedule?.durationInMinutes ?? 10;
+    TimeOfDay selectedTime = schedule != null ? TimeOfDay.fromDateTime(schedule.time) : TimeOfDay.now();
     bool smartSkip = schedule?.smartSkip ?? true;
     List<int> selectedMotors = schedule != null ? List.from(schedule.selectedMotors) : [1];
 
@@ -181,8 +141,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                Text(schedule == null ? "Add New Schedule" : "Edit Schedule",
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A))),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(schedule == null ? "Add New Schedule" : "Edit Schedule",
+                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A))),
+                    if (schedule != null)
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+                        onPressed: () {
+                          _service.deleteSchedule(schedule.id);
+                          Navigator.pop(context);
+                        },
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 25),
                 TextFormField(
                   initialValue: title,
@@ -210,18 +183,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       final TimeOfDay? picked = await showTimePicker(
                         context: context, 
                         initialTime: selectedTime,
-                        builder: (context, child) {
-                          return Theme(
-                            data: Theme.of(context).copyWith(
-                              colorScheme: const ColorScheme.light(
-                                primary: Color(0xFF2E7D32),
-                                onPrimary: Colors.white,
-                                onSurface: Color(0xFF1A1A1A),
-                              ),
-                            ),
-                            child: child!,
-                          );
-                        },
                       );
                       if (picked != null) setModalState(() => selectedTime = picked);
                     },
@@ -242,9 +203,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       onTap: () {
                         setModalState(() {
                           if (isSelected) {
-                            if (selectedMotors.length > 1) {
-                              selectedMotors.remove(motorNum);
-                            }
+                            if (selectedMotors.length > 1) selectedMotors.remove(motorNum);
                           } else {
                             selectedMotors.add(motorNum);
                             selectedMotors.sort();
@@ -257,19 +216,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         decoration: BoxDecoration(
                           color: isSelected ? const Color(0xFF2E7D32) : Colors.grey[200],
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isSelected ? const Color(0xFF2E7D32) : Colors.grey[300]!,
-                            width: 1,
-                          ),
                         ),
                         child: Center(
-                          child: Text(
-                            "$motorNum",
-                            style: TextStyle(
-                              color: isSelected ? Colors.white : Colors.black87,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          child: Text("$motorNum", style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
                         ),
                       ),
                     );
@@ -282,21 +231,18 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         value: frequency,
-                        decoration: InputDecoration(labelText: "Frequency", border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))),
+                        decoration: const InputDecoration(labelText: "Frequency", border: OutlineInputBorder()),
                         items: ["Daily", "Weekly", "Mon-Wed-Fri", "Weekends"]
-                            .map((f) => DropdownMenuItem(value: f, child: Text(f)))
-                            .toList(),
+                            .map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
                         onChanged: (val) => setModalState(() => frequency = val!),
                       ),
                     ),
                     const SizedBox(width: 15),
                     Expanded(
-                      child: DropdownButtonFormField<String>(
+                      child: DropdownButtonFormField<int>(
                         value: duration,
-                        decoration: InputDecoration(labelText: "Duration", border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))),
-                        items: ["5 mins", "10 mins", "15 mins", "20 mins", "30 mins"]
-                            .map((d) => DropdownMenuItem(value: d, child: Text(d)))
-                            .toList(),
+                        decoration: const InputDecoration(labelText: "Duration (min)", border: OutlineInputBorder()),
+                        items: [5, 10, 15, 20, 30].map((d) => DropdownMenuItem(value: d, child: Text("$d min"))).toList(),
                         onChanged: (val) => setModalState(() => duration = val!),
                       ),
                     ),
@@ -308,8 +254,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   title: const Text("Smart Skip", style: TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: const Text("Skip watering if rain is predicted"),
                   value: smartSkip,
-                  activeThumbColor: Colors.white,
-                  activeTrackColor: const Color(0xFF2E7D32),
+                  activeColor: const Color(0xFF2E7D32),
                   onChanged: (val) => setModalState(() => smartSkip = val),
                 ),
                 const SizedBox(height: 30),
@@ -318,34 +263,32 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   height: 55,
                   child: ElevatedButton(
                     onPressed: () {
-                      if (title.isEmpty) title = "Watering Task";
-                      setState(() {
-                        final newSchedule = WateringSchedule(
-                          time: _formatTimeOfDay(selectedTime),
-                          title: title,
-                          frequency: frequency,
-                          duration: duration,
-                          isEnabled: schedule?.isEnabled ?? true,
-                          smartSkip: smartSkip,
-                          selectedMotors: selectedMotors,
-                        );
+                      final now = DateTime.now();
+                      final DateTime scheduleTime = DateTime(now.year, now.month, now.day, selectedTime.hour, selectedTime.minute);
+                      
+                      final newSchedule = WateringSchedule(
+                        id: schedule?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+                        time: scheduleTime,
+                        title: title.isEmpty ? "Watering Task" : title,
+                        frequency: frequency,
+                        durationInMinutes: duration,
+                        isEnabled: schedule?.isEnabled ?? true,
+                        smartSkip: smartSkip,
+                        selectedMotors: selectedMotors,
+                      );
 
-                        if (index == null) {
-                          schedules.add(newSchedule);
-                        } else {
-                          schedules[index] = newSchedule;
-                        }
-                      });
-                      _saveSchedules();
+                      if (schedule == null) {
+                        _service.addSchedule(newSchedule);
+                      } else {
+                        _service.updateSchedule(newSchedule);
+                      }
                       Navigator.pop(context);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2E7D32),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      elevation: 0,
                     ),
-                    child: Text(schedule == null ? "Add Schedule" : "Update Schedule",
-                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    child: Text(schedule == null ? "Add Schedule" : "Update Schedule", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -357,13 +300,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  void _deleteSchedule(int index) {
-    setState(() {
-      schedules.removeAt(index);
-    });
-    _saveSchedules();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -372,25 +308,19 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         children: [
           _buildHeaderContent(),
           Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF2E7D32)))
-                : schedules.isEmpty
-                    ? _buildEmptyState()
-                    : ListView.builder(
-                        padding: const EdgeInsets.only(left: 20, right: 20, top: 10, bottom: 100),
-                        itemCount: schedules.length,
-                        itemBuilder: (context, index) {
-                          return _buildScheduleCard(schedules[index], index);
-                        },
-                      ),
+            child: _service.schedules.isEmpty
+                ? _buildEmptyState()
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    itemCount: _service.schedules.length,
+                    itemBuilder: (context, index) => _buildScheduleCard(_service.schedules[index]),
+                  ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'schedule_fab',
         onPressed: () => _showScheduleSheet(),
         backgroundColor: const Color(0xFF2E7D32),
-        elevation: 4,
         icon: const Icon(Icons.add_rounded, color: Colors.white),
         label: const Text("New Schedule", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
@@ -425,15 +355,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
+                    color: Colors.white.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
                 ),
               ),
               const SizedBox(width: 15),
-              const Text("Watering Schedule",
-                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+              const Text("Watering Schedule", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 5),
@@ -443,113 +372,97 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  Widget _buildScheduleCard(WateringSchedule schedule, int index) {
-    return Dismissible(
-      key: Key(schedule.title + schedule.time),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        margin: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(20)),
-        child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 30),
+  Widget _buildScheduleCard(WateringSchedule schedule) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
-      onDismissed: (_) => _deleteSchedule(index),
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _showScheduleSheet(schedule: schedule, index: index),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(12)),
-                              child: const Icon(Icons.access_time_filled_rounded, color: Color(0xFF2E7D32), size: 24),
-                            ),
-                            const SizedBox(width: 15),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(schedule.time,
-                                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A))),
-                                Text(schedule.frequency, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                              ],
-                            ),
-                          ],
-                        ),
-                        Switch.adaptive(
-                          value: schedule.isEnabled,
-                          activeColor: const Color(0xFF2E7D32),
-                          onChanged: (val) {
-                            setState(() => schedule.isEnabled = val);
-                            _saveSchedules();
-                          },
-                        ),
-                      ],
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.access_time_filled_rounded, color: Color(0xFF2E7D32), size: 24),
                     ),
-                    const Padding(padding: EdgeInsets.symmetric(vertical: 15), child: Divider(height: 1)),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    const SizedBox(width: 15),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(_truncateText(schedule.title, 20),
-                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF424242))),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Icon(Icons.timer_outlined, size: 14, color: Colors.grey[500]),
-                                  const SizedBox(width: 4),
-                                  Text(schedule.duration, style: TextStyle(color: Colors.grey[500], fontSize: 13)),
-                                  const SizedBox(width: 12),
-                                  Icon(Icons.settings_input_component_rounded, size: 14, color: Colors.grey[500]),
-                                  const SizedBox(width: 4),
-                                  Text("${schedule.selectedMotors.length} Motors",
-                                      style: TextStyle(color: Colors.grey[500], fontSize: 13)),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (schedule.smartSkip)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(20)),
-                            child: Row(
-                              children: [
-                                Icon(Icons.auto_awesome_rounded, size: 12, color: Colors.blue[700]),
-                                const SizedBox(width: 4),
-                                Text("Smart Skip",
-                                    style: TextStyle(color: Colors.blue[700], fontSize: 10, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          ),
+                        Text(_formatTimeOfDay(TimeOfDay.fromDateTime(schedule.time)), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                        Text(schedule.frequency, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
                       ],
                     ),
                   ],
                 ),
-              ),
+                Switch.adaptive(
+                  value: schedule.isEnabled,
+                  activeColor: const Color(0xFF2E7D32),
+                  onChanged: (val) => _service.toggleSchedule(schedule.id, val),
+                ),
+              ],
             ),
-          ),
+            const Divider(height: 30),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_truncateText(schedule.title, 20), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.timer_outlined, size: 14, color: Colors.grey[500]),
+                          const SizedBox(width: 4),
+                          Text("${schedule.durationInMinutes} min", style: TextStyle(color: Colors.grey[500])),
+                          const SizedBox(width: 12),
+                          Icon(Icons.settings_input_component_rounded, size: 14, color: Colors.grey[500]),
+                          const SizedBox(width: 4),
+                          Text("${schedule.selectedMotors.length} Motors", style: TextStyle(color: Colors.grey[500])),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Row(
+                  children: [
+                    IconButton(icon: const Icon(Icons.edit_outlined, color: Color(0xFF2E7D32)), onPressed: () => _showScheduleSheet(schedule: schedule)),
+                    IconButton(icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent), onPressed: () => _showDeleteConfirmation(schedule.id)),
+                  ],
+                ),
+              ],
+            ),
+          ],
         ),
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(String id) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete Schedule"),
+        content: const Text("Are you sure?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
+          ElevatedButton(
+            onPressed: () { _service.deleteSchedule(id); Navigator.pop(context); },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text("DELETE", style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
