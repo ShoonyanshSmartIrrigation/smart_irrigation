@@ -23,7 +23,8 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
   @override
   void dispose() {
     _service.removeListener(_onServiceUpdate);
-    _service.dispose();
+    // ✅ Do NOT call _service.dispose() here because PlantService is a Singleton.
+    // Disposing it here would prevent it from being used again when the screen is rebuilt.
     super.dispose();
   }
 

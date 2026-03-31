@@ -3,6 +3,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 class AuthException implements Exception {
   final String message;
@@ -55,6 +56,35 @@ class AuthService {
     }
   }
 
+  // Create User Node in Firebase Realtime Database
+  Future<void> _createUserInDatabase(User user, {String? phone}) async {
+    final DatabaseReference userRef = FirebaseDatabase.instance.ref().child('users').child(user.uid);
+    
+    // Check if users/{uid} already exists
+    final snapshot = await userRef.get();
+    if (snapshot.exists) return;
+
+    // Create node if it doesn't exist
+    await userRef.set({
+      "profile": {
+        "name": user.displayName ?? "User",
+        "email": user.email ?? "",
+        "phone": phone ?? "",
+        "createdAt": ServerValue.timestamp,
+      },
+      "motors": {
+        "1": {"isOn": false},
+        "2": {"isOn": false},
+        "3": {"isOn": false}
+      },
+      "plants": {
+        "1": {"name": "Plant 1", "moisture": 0},
+        "2": {"name": "Plant 2", "moisture": 0}
+      },
+      "schedules": {}
+    });
+  }
+
   // 4. Firebase Exception Handling Helper
   String _handleFirebaseError(FirebaseAuthException e) {
     switch (e.code) {
@@ -93,6 +123,7 @@ class AuthService {
       if (user != null) {
         await user.updateDisplayName(name);
         await _saveUserData(name: name, email: email, phone: phone);
+        await _createUserInDatabase(user, phone: phone);
       }
       return user;
     } on FirebaseAuthException catch (e) {
@@ -120,6 +151,7 @@ class AuthService {
           name: user.displayName ?? "User",
           email: user.email ?? "",
         );
+        await _createUserInDatabase(user);
       }
       return user;
     } on FirebaseAuthException catch (e) {
@@ -160,6 +192,7 @@ class AuthService {
           name: user.displayName ?? "User",
           email: user.email ?? "",
         );
+        await _createUserInDatabase(user);
       }
       return user;
     } on FirebaseAuthException catch (e) {
