@@ -286,8 +286,8 @@ class DashboardService extends ChangeNotifier {
     });
 
     _moistureTimer?.cancel();
-    _moistureTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      _dataManager.simulateMoisture();
+    _moistureTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      await PlantService().fetchMoistureData();
       notifyListeners();
     });
   }

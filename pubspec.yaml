@@ -27,6 +27,14 @@ dependencies:
   wifi_iot: ^0.3.19+2
   wifi_scan: ^0.4.1+2
   permission_handler: ^12.0.1
+  flutter_launcher_icons: ^0.14.4
+
+
+
+
+flutter_icons:
+  android: true
+  image_path: "assets/jpeg/icon.jpeg"
 
 
 dev_dependencies:
@@ -39,3 +47,5 @@ flutter:
 
   assets:
     - assets/svg/
+
+

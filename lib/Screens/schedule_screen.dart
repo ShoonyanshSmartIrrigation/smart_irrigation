@@ -14,6 +14,7 @@ class ScheduleScreen extends StatefulWidget {
 class _ScheduleScreenState extends State<ScheduleScreen> {
   final ScheduleService _service = ScheduleService();
   bool _isLoading = false;
+  String? _togglingScheduleId;
 
   @override
   void initState() {
@@ -227,7 +228,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: frequency,
+                            initialValue: frequency,
                         decoration: InputDecoration(
                           labelText: "Frequency", 
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
@@ -240,7 +241,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     const SizedBox(width: 15),
                     Expanded(
                       child: DropdownButtonFormField<int>(
-                        value: duration,
+                            initialValue: duration,
                         menuMaxHeight: 300,
                         decoration: InputDecoration(
                           labelText: "Duration (min)", 
@@ -263,25 +264,32 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   height: 55,
                   child: ElevatedButton(
                     onPressed: () async {
-                      final newSchedule = WateringSchedule(
-                        id: schedule?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                        time: _timeToString(selectedTime),
-                        title: title.isEmpty ? "Watering Task" : title,
-                        frequency: frequency,
-                        durationInMinutes: duration,
-                        isEnabled: schedule?.isEnabled ?? true,
-                        selectedMotors: selectedMotors,
-                      );
+                       // Ensure Main Motor (1) is not duplicated
+                       final motors = List<int>.from(selectedMotors);
+                       if (!motors.contains(1)) motors.insert(0, 1);
+                       motors.removeWhere((e) => motors.indexOf(e) != motors.lastIndexOf(e));
+
+                       final newSchedule = WateringSchedule(
+                         id: schedule?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+                         time: _timeToString(selectedTime),
+                         title: title.isEmpty ? "Watering Task" : title,
+                         frequency: frequency,
+                         durationInMinutes: duration,
+                         isEnabled: schedule?.isEnabled ?? true,
+                         selectedMotors: motors,
+                       );
 
                       try {
-                        if (schedule == null) {
-                          await _service.addSchedule(newSchedule);
-                          _showSuccess("Schedule added and synced");
-                        } else {
-                          await _service.updateSchedule(newSchedule);
-                          _showSuccess("Schedule updated and synced");
-                        }
-                        if (mounted) Navigator.pop(context);
+                         setState(() => _isLoading = true);
+                         if (schedule == null) {
+                           await _service.addSchedule(newSchedule);
+                           _showSuccess("Schedule added and synced");
+                         } else {
+                           await _service.updateSchedule(newSchedule);
+                           _showSuccess("Schedule updated and synced");
+                         }
+                         if (mounted) Navigator.pop(context);
+                         setState(() => _isLoading = false);
                       } catch (e) {
                         _showError("Failed to save schedule. Check ESP32 connection.");
                       }
@@ -374,7 +382,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.white.withOpacity(0.15),
+                     color: AppColors.white.withAlpha((0.15 * 255).toInt()),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.white, size: 18),
@@ -426,18 +434,22 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     ),
                   ],
                 ),
-                Switch.adaptive(
-                  value: schedule.isEnabled,
-                  activeColor: AppColors.primary,
-                  onChanged: (val) async {
-                    try {
-                      await _service.toggleSchedule(schedule.id, val);
-                      _showSuccess(val ? "Schedule enabled & synced" : "Schedule disabled");
-                    } catch (e) {
-                      _showError("Failed to toggle schedule. Check ESP32.");
-                    }
-                  },
-                ),
+                _togglingScheduleId == schedule.id
+                    ? const SizedBox(width: 32, height: 32, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Switch.adaptive(
+                        value: schedule.isEnabled,
+                                                                  activeThumbColor: AppColors.primary,
+                        onChanged: (val) async {
+                          setState(() => _togglingScheduleId = schedule.id);
+                          try {
+                            await _service.toggleSchedule(schedule.id, val);
+                            _showSuccess(val ? "Schedule enabled & synced" : "Schedule disabled");
+                          } catch (e) {
+                            _showError("Failed to toggle schedule. Check ESP32.");
+                          }
+                          setState(() => _togglingScheduleId = null);
+                        },
+                      ),
               ],
             ),
             const Divider(height: 30),
@@ -452,13 +464,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Icon(Icons.timer_outlined, size: 14, color: AppColors.grey.withOpacity(0.5)),
+                           Icon(Icons.timer_outlined, size: 14, color: AppColors.grey.withAlpha((0.5 * 255).toInt())),
                           const SizedBox(width: 4),
-                          Text("${schedule.durationInMinutes} min", style: TextStyle(color: AppColors.grey.withOpacity(0.5))),
+                           Text("${schedule.durationInMinutes} min", style: TextStyle(color: AppColors.grey.withAlpha((0.5 * 255).toInt()))),
                           const SizedBox(width: 12),
-                          Icon(Icons.settings_input_component_rounded, size: 14, color: AppColors.grey.withOpacity(0.5)),
+                           Icon(Icons.settings_input_component_rounded, size: 14, color: AppColors.grey.withAlpha((0.5 * 255).toInt())),
                           const SizedBox(width: 4),
-                          Text("${schedule.selectedMotors.length} Plants", style: TextStyle(color: AppColors.grey.withOpacity(0.5))),
+                           Text("${schedule.selectedMotors.length} Plants", style: TextStyle(color: AppColors.grey.withAlpha((0.5 * 255).toInt()))),
                         ],
                       ),
                     ],
@@ -483,7 +495,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Delete Schedule"),
-        content: const Text("Are you sure? This will remove the schedule from Firebase and stop it on ESP32 if active."),
+        content: const Text("Are you sure? This will remove the schedule from Firebase."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
           ElevatedButton(

@@ -264,40 +264,32 @@ void checkAlarmIrrigation() {
 
   int currentHour   = timeinfo.tm_hour;
   int currentMinute = timeinfo.tm_min;
-  int currentSecond = timeinfo.tm_sec;
   int currentDay    = timeinfo.tm_mday;
 
-  static int lastCheckedMinute = -1;
+  // No minute gate — check every loop pass
+  if (alarmEnabled && !alarmRunning && currentDay != lastAlarmTriggerDay) {
+    if (currentHour == alarmHour && currentMinute == alarmMinute) {
+      Serial.println("⏰ ALARM TRIGGERED at " + String(currentHour) + ":" + String(currentMinute));
 
-  // Only check when minute changes (more precise)
-  if (currentMinute != lastCheckedMinute) {
-    lastCheckedMinute = currentMinute;
+      alarmRunning = true;
+      alarmStartMillis = millis();
+      lastAlarmTriggerDay = currentDay;
+      autoMode = false;
 
-    if (alarmEnabled && !alarmRunning && currentDay != lastAlarmTriggerDay) {
-      if (currentHour == alarmHour && currentMinute == alarmMinute) {
-        Serial.println("⏰ ALARM TRIGGERED at " + String(currentHour) + ":" +
-                       String(currentMinute) + ":" + String(currentSecond));
-
-        alarmRunning = true;
-        alarmStartMillis = millis();
-        lastAlarmTriggerDay = currentDay;
-        autoMode = false;
-
-        // Turn on selected motors immediately
-        Serial.println("🔧 Starting alarm motors...");
-        for (int i = 0; i < NUM_MOTORS; i++) {
-          if (alarmSelectedMotors[i]) {
-            motorStates[i] = true;
-            digitalWrite(MOTOR_PINS[i], HIGH);
-            if (MOTOR_PINS[i] == 2) delay(5); // GPIO 2 stabilization
-            Serial.println("  Motor " + String(i) + " ON (GPIO " + String(MOTOR_PINS[i]) + ")");
-          } else {
-            motorStates[i] = false;
-            digitalWrite(MOTOR_PINS[i], LOW);
-          }
+      // Turn on selected motors immediately
+      Serial.println("🔧 Starting alarm motors...");
+      for (int i = 0; i < NUM_MOTORS; i++) {
+        if (alarmSelectedMotors[i]) {
+          motorStates[i] = true;
+          digitalWrite(MOTOR_PINS[i], HIGH);
+          if (MOTOR_PINS[i] == 2) delay(5); // GPIO 2 stabilization
+          Serial.println("  Motor " + String(i) + " ON (GPIO " + String(MOTOR_PINS[i]) + ")");
+        } else {
+          motorStates[i] = false;
+          digitalWrite(MOTOR_PINS[i], LOW);
         }
-        Serial.println("✅ Alarm irrigation started - Duration: " + String(alarmDuration/1000/60) + " minutes");
       }
+      Serial.println("✅ Alarm irrigation started - Duration: " + String(alarmDuration/1000/60) + " minutes");
     }
   }
 
@@ -312,11 +304,12 @@ void checkAlarmIrrigation() {
 // ─── Stop alarm irrigation ────────────────────────────────────────────────────
 void stopAlarmIrrigation() {
   alarmRunning = false;
-  alarmEnabled = false;
+  // alarmEnabled stays true so alarm re-arms for tomorrow automatically
   for (int i = 0; i < NUM_MOTORS; i++) {
     motorStates[i] = false;
     digitalWrite(MOTOR_PINS[i], LOW);
   }
+  Serial.println("⏰ Alarm irrigation stopped. Re-arms tomorrow.");
 }
 
 // ─── WiFi connection watchdog ─────────────────────────────────────────────────
@@ -487,7 +480,7 @@ void handleIndividualMotorsLED() {
 // ─── Moisture sensor reader ───────────────────────────────────────────────────
 void readAllMoistureSensors() {
   static unsigned long lastSensorRead = 0;
-  const unsigned long SENSOR_READ_INTERVAL = 2000;
+  const unsigned long SENSOR_READ_INTERVAL = 500;
 
   if (millis() - lastSensorRead >= SENSOR_READ_INTERVAL) {
     lastSensorRead = millis();
@@ -495,13 +488,23 @@ void readAllMoistureSensors() {
     // Read main motor moisture sensor
     int mainMoistureRaw = analogRead(MAIN_MOTOR_MOISTURE_PIN);
     mainMotorMoistureValue = mainMoistureRaw;
-    mainMotorMoisturePercent = map(constrain(mainMoistureRaw, 0, 4095), 0, 4095, 0, 100);
+    float mainVoltage = (mainMoistureRaw * 3.3) / 4095.0;
+    if (mainVoltage < 0.771 || mainVoltage > 2.25) {
+      mainMotorMoisturePercent = -1; // Sensor open/not present
+    } else {
+      mainMotorMoisturePercent = constrain(((2.25 - mainVoltage) / (2.25 - 0.771)) * 100, 0, 100);
+    }
 
     // Read individual plant moisture sensors
     for (int i = 0; i < NUM_SENSORS; i++) {
       int moistureRaw = analogRead(MOISTURE_SENSOR_PINS[i]);
       moistureValues[i] = moistureRaw;
-      moisturePercents[i] = map(constrain(moistureRaw, 0, 4095), 0, 4095, 0, 100);
+      float voltage = (moistureRaw * 3.3) / 4095.0;
+      if (voltage < 0.771 || voltage > 2.25) {
+        moisturePercents[i] = -1; // Sensor open/not present
+      } else {
+        moisturePercents[i] = constrain(((2.25 - voltage) / (2.25 - 0.771)) * 100, 0, 100);
+      }
     }
   }
 }
@@ -690,7 +693,6 @@ void loop() {
   readAllMoistureSensors();
   reportMotorStatus();
   debugHTTPRequests();
-  delay(10);
 }
 
 // ─── setupServer() ────────────────────────────────────────────────────────────
@@ -706,8 +708,12 @@ void setupServer() {
   });
 
   // Main motor ON
-  server.on("/api/mainmotor/on", HTTP_POST, []() {
+  server.on("/api/mainmotor/on", HTTP_ANY, []() {
       sendCORSHeaders();
+      if (server.method() == HTTP_OPTIONS) {
+        server.send(200, "text/plain", "");
+        return;
+      }
       autoMode = false;
       motorStates[0] = true;
       digitalWrite(MOTOR_PINS[0], HIGH);
@@ -715,8 +721,12 @@ void setupServer() {
   });
 
   // Main motor OFF
-  server.on("/api/mainmotor/off", HTTP_POST, []() {
+  server.on("/api/mainmotor/off", HTTP_ANY, []() {
       sendCORSHeaders();
+      if (server.method() == HTTP_OPTIONS) {
+        server.send(200, "text/plain", "");
+        return;
+      }
       autoMode = false;
       motorStates[0] = false;
       digitalWrite(MOTOR_PINS[0], LOW);
@@ -724,8 +734,12 @@ void setupServer() {
   });
 
   // Individual motor ON
-  server.on("/api/motor/on", HTTP_POST, []() {
+  server.on("/api/motor/on", HTTP_ANY, []() {
       sendCORSHeaders();
+      if (server.method() == HTTP_OPTIONS) {
+        server.send(200, "text/plain", "");
+        return;
+      }
       autoMode = false;
       int motorId = constrain(server.arg("motor_id").toInt(), 0, 8);
       motorStates[motorId] = true;
@@ -735,9 +749,13 @@ void setupServer() {
 
   // Individual motor OFF
   // BUG FIX: Test page JS was calling /api/motor/on for both ON and OFF.
-  // The endpoint itself was correct; fixed the test page JS below.
-  server.on("/api/motor/off", HTTP_POST, []() {
+  // The endpoint itself was correct; fixed test page JS below.
+  server.on("/api/motor/off", HTTP_ANY, []() {
       sendCORSHeaders();
+      if (server.method() == HTTP_OPTIONS) {
+        server.send(200, "text/plain", "");
+        return;
+      }
       autoMode = false;
       int motorId = constrain(server.arg("motor_id").toInt(), 0, 8);
       motorStates[motorId] = false;
@@ -913,44 +931,77 @@ void setupServer() {
       sendJsonResponse("{\"status\":\"ok\",\"action\":\"all_off\"}");
   });
 
-  // Alarm set
-  server.on("/api/alarm/set", HTTP_POST, []() {
+  // Alarm set - HTTP_ANY for CORS and browser testing
+  server.on("/api/alarm/set", HTTP_ANY, []() {
       sendCORSHeaders();
-      String body = server.arg("plain");
+      if (server.method() == HTTP_OPTIONS) {
+        server.send(200, "text/plain", "");
+        return;
+      }
+
       int hour = 0, minute = 0, duration = 25;
       bool motorSelection[NUM_MOTORS];
       for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = true;
 
-      int hourIndex = body.indexOf("\"hour\":");
-      if (hourIndex > 0) {
-        int s = hourIndex + 7; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
-        hour = constrain(body.substring(s, e).toInt(), 0, 23);
-      }
-      int minuteIndex = body.indexOf("\"minute\":");
-      if (minuteIndex > 0) {
-        int s = minuteIndex + 9; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
-        minute = constrain(body.substring(s, e).toInt(), 0, 59);
-      }
-      int durationIndex = body.indexOf("\"duration\":");
-      if (durationIndex > 0) {
-        int s = durationIndex + 11; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
-        duration = body.substring(s, e).toInt();
-        if (duration <= 0) duration = 25;
-      }
+      if (server.method() == HTTP_POST) {
+        // Handle POST with JSON body (existing logic)
+        String body = server.arg("plain");
 
-      int motorsIndex = body.indexOf("\"motors\":");
-      if (motorsIndex > 0) {
-        int s = body.indexOf("[", motorsIndex); int e = body.indexOf("]", s);
-        if (e > s) {
-          String motorsStr = body.substring(s + 1, e);
-          motorsStr.replace(" ", ""); motorsStr.replace("\n", "");
+        int hourIndex = body.indexOf("\"hour\":");
+        if (hourIndex > 0) {
+          int s = hourIndex + 7; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
+          hour = constrain(body.substring(s, e).toInt(), 0, 23);
+        }
+        int minuteIndex = body.indexOf("\"minute\":");
+        if (minuteIndex > 0) {
+          int s = minuteIndex + 9; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
+          minute = constrain(body.substring(s, e).toInt(), 0, 59);
+        }
+        int durationIndex = body.indexOf("\"duration\":");
+        if (durationIndex > 0) {
+          int s = durationIndex + 11; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
+          duration = body.substring(s, e).toInt();
+          if (duration <= 0) duration = 25;
+        }
+
+        int motorsIndex = body.indexOf("\"motors\":");
+        if (motorsIndex > 0) {
+          int s = body.indexOf("[", motorsIndex); int e = body.indexOf("]", s);
+          if (e > s) {
+            String motorsStr = body.substring(s + 1, e);
+            motorsStr.replace(" ", ""); motorsStr.replace("\n", "");
+            for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = false;
+            int pos = 0;
+            while (pos < (int)motorsStr.length()) {
+              int comma = motorsStr.indexOf(",", pos); if (comma < 0) comma = motorsStr.length();
+              int motorId = motorsStr.substring(pos, comma).toInt();
+              if (motorId >= 1 && motorId <= NUM_MOTORS) motorSelection[motorId - 1] = true;
+              pos = comma + 1;
+            }
+          }
+        }
+      } else if (server.method() == HTTP_GET) {
+        // Handle GET with query params for browser testing
+        hour = constrain(server.arg("hour").toInt(), 0, 23);
+        minute = constrain(server.arg("minute").toInt(), 0, 59);
+        duration = server.arg("duration").toInt();
+        if (duration <= 0) duration = 25;
+
+        String motors = server.arg("motors");
+        if (motors.length() > 0) {
           for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = false;
-          int pos = 0;
-          while (pos < (int)motorsStr.length()) {
-            int comma = motorsStr.indexOf(",", pos); if (comma < 0) comma = motorsStr.length();
-            int motorId = motorsStr.substring(pos, comma).toInt();
-            if (motorId >= 1 && motorId <= NUM_MOTORS) motorSelection[motorId - 1] = true;
-            pos = comma + 1;
+          int motorNum = 0;
+          int start = 0;
+          for (int i = 0; i <= motors.length(); i++) {
+            if (i == motors.length() || motors.charAt(i) == ',') {
+              if (i > start) {
+                motorNum = motors.substring(start, i).toInt();
+                if (motorNum >= 1 && motorNum <= NUM_MOTORS) {
+                  motorSelection[motorNum - 1] = true;
+                }
+              }
+              start = i + 1;
+            }
           }
         }
       }
@@ -974,14 +1025,43 @@ void setupServer() {
       Serial.println("⏰ Alarm Set: " + String(hour) + ":" + String(minute) + " for " + String(duration) + " minutes");
   });
 
-  // Alarm stop
-  server.on("/api/alarm/stop", HTTP_POST, []() {
+  // Alarm stop - HTTP_ANY for CORS support
+  server.on("/api/alarm/stop", HTTP_ANY, []() {
       sendCORSHeaders();
-      alarmEnabled = false;
-      alarmRunning = false;
+      if (server.method() == HTTP_OPTIONS) {
+        server.send(200, "text/plain", "");
+        return;
+      }
+
       stopAlarmIrrigation();
       sendJsonResponse("{\"status\":\"ok\",\"alarm\":\"stopped\"}");
       Serial.println("⏰ Alarm Stopped");
+  });
+
+  // Alarm status - GET endpoint for current alarm state
+  server.on("/api/alarm/status", HTTP_GET, []() {
+      sendCORSHeaders();
+
+      String json = "{\"status\":\"ok\",";
+      json += "\"alarmEnabled\":" + String(alarmEnabled ? "true" : "false") + ",";
+      json += "\"alarmRunning\":" + String(alarmRunning ? "true" : "false") + ",";
+      json += "\"alarmHour\":" + String(alarmHour) + ",";
+      json += "\"alarmMinute\":" + String(alarmMinute) + ",";
+      json += "\"alarmDuration\":" + String(alarmDuration / 60000) + ",";
+      json += "\"alarmTimeRemaining\":" + String(alarmRunning ? (alarmDuration - (millis() - alarmStartMillis)) / 1000 : 0) + ",";
+      json += "\"alarmSelectedMotors\":[";
+
+      bool first = true;
+      for (int i = 0; i < NUM_MOTORS; i++) {
+        if (alarmSelectedMotors[i]) {
+          if (!first) json += ",";
+          json += String(i);
+          first = false;
+        }
+      }
+      json += "]}";
+
+      sendJsonResponse(json);
   });
 
 

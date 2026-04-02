@@ -31,7 +31,7 @@ class DataManager {
     return Plant(
       id: index + 1,
       name: "Plant ${index + 1}",
-      moistureLevel: Random().nextInt(50) + 30,
+      moistureLevel: 0,
       isMotorOn: false,
       isAutoMode: false,
       minMoistureThreshold: 30,

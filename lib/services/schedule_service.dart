@@ -77,9 +77,13 @@ class ScheduleService extends ChangeNotifier {
   List<WateringSchedule> _schedules = [];
   List<WateringSchedule> get schedules => _schedules;
   StreamSubscription? _subscription;
+  
+  Timer? _localCheckTimer;
+  final Set<String> _triggeredKeys = {};
 
   ScheduleService._internal() {
     _initListener();
+    _startLocalTimer();
   }
 
   String get _userEmailKey => _auth.currentUser?.email?.replaceAll('.', ',') ?? "anonymous";
@@ -114,6 +118,58 @@ class ScheduleService extends ChangeNotifier {
     });
   }
 
+  void _startLocalTimer() {
+    _localCheckTimer?.cancel();
+    _localCheckTimer = Timer.periodic(const Duration(seconds: 20), (timer) {
+      _checkAndTriggerSchedules();
+    });
+  }
+
+  void _checkAndTriggerSchedules() {
+    final now = DateTime.now();
+    final currentTimeStr = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+    final todayKey = "${now.year}-${now.month}-${now.day}";
+
+    _triggeredKeys.removeWhere((key) => !key.contains(todayKey));
+
+    for (var schedule in _schedules) {
+      if (schedule.isEnabled && schedule.time == currentTimeStr) {
+        final triggerKey = "${schedule.id}-$currentTimeStr-$todayKey";
+        if (!_triggeredKeys.contains(triggerKey)) {
+          _triggeredKeys.add(triggerKey);
+          _triggerImmediateIrrigation(schedule);
+        }
+      }
+    }
+  }
+
+  Future<void> _triggerImmediateIrrigation(WateringSchedule schedule) async {
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) return;
+
+    try {
+      List<int> esp32Motors = [1];
+      for (var m in schedule.selectedMotors) {
+        if (m + 1 <= 9) esp32Motors.add(m + 1);
+      }
+
+      final body = {
+        "duration": schedule.durationInMinutes,
+        "motors": esp32Motors,
+      };
+
+      await http.post(
+        Uri.parse("$baseUrl/api/schedule/start"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 5));
+      
+      debugPrint("📱 Local WiFi Trigger: Started ${schedule.title}");
+    } catch (e) {
+      debugPrint("📱 Local WiFi Trigger Failed: $e");
+    }
+  }
+
   Future<String?> _getBaseUrl() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -144,13 +200,13 @@ class ScheduleService extends ChangeNotifier {
   }
 
   Future<void> addSchedule(WateringSchedule schedule) async {
+    // Try local sync first
+    if (schedule.isEnabled) {
+      _syncToEsp32(schedule).catchError((e) => debugPrint("Local sync failed: $e"));
+    }
+
     try {
-      // Removed mutual exclusivity to allow multiple enabled schedules
       await _db.ref("$_basePath/${schedule.id}").set(schedule.toJson());
-      
-      if (schedule.isEnabled) {
-        await _syncToEsp32(schedule);
-      }
     } catch (e) {
       debugPrint("ScheduleService Add Error: $e");
       rethrow;
@@ -158,15 +214,13 @@ class ScheduleService extends ChangeNotifier {
   }
 
   Future<void> updateSchedule(WateringSchedule schedule) async {
+    // Try local sync first
+    if (schedule.isEnabled) {
+      _syncToEsp32(schedule).catchError((e) => debugPrint("Local sync failed: $e"));
+    }
+
     try {
-      // Removed mutual exclusivity to allow multiple enabled schedules
       await _db.ref("$_basePath/${schedule.id}").update(schedule.toJson());
-      
-      if (schedule.isEnabled) {
-        await _syncToEsp32(schedule);
-      } else {
-        await _stopEsp32Alarm();
-      }
     } catch (e) {
       debugPrint("ScheduleService Update Error: $e");
       rethrow;
@@ -178,13 +232,7 @@ class ScheduleService extends ChangeNotifier {
       final scheduleIndex = _schedules.indexWhere((s) => s.id == id);
       if (scheduleIndex == -1) return;
       
-      final schedule = _schedules[scheduleIndex];
-      
       await _db.ref("$_basePath/$id").remove();
-      
-      if (schedule.isEnabled) {
-        await _stopEsp32Alarm();
-      }
     } catch (e) {
       debugPrint("ScheduleService Delete Error: $e");
       rethrow;
@@ -204,14 +252,13 @@ class ScheduleService extends ChangeNotifier {
 
   Future<void> _syncToEsp32(WateringSchedule schedule) async {
     final baseUrl = await _getBaseUrl();
-    if (baseUrl == null) throw Exception("ESP32 IP not configured");
+    if (baseUrl == null) return;
 
     try {
       final timeParts = schedule.time.split(':');
-      
-      List<int> esp32Motors = [1]; // Always include Main Motor (ID 1)
+      List<int> esp32Motors = [1];
       for (var m in schedule.selectedMotors) {
-        esp32Motors.add(m + 1); // Map UI 1-8 to hardware IDs 2-9
+        esp32Motors.add(m + 1);
       }
 
       final body = {
@@ -221,30 +268,31 @@ class ScheduleService extends ChangeNotifier {
         "motors": esp32Motors,
       };
 
-      final response = await http.post(
+      await http.post(
         Uri.parse("$baseUrl/api/alarm/set"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(body),
       ).timeout(const Duration(seconds: 5));
-
-      if (response.statusCode != 200) {
-        throw Exception("ESP32 responded with ${response.statusCode}");
-      }
     } catch (e) {
       debugPrint("Sync to ESP32 failed: $e");
-      rethrow;
     }
   }
 
   Future<void> _stopEsp32Alarm() async {
     final baseUrl = await _getBaseUrl();
     if (baseUrl == null) return;
-
     try {
       await http.post(Uri.parse("$baseUrl/api/alarm/stop"))
           .timeout(const Duration(seconds: 5));
     } catch (e) {
       debugPrint("Stop ESP32 alarm failed: $e");
     }
+  }
+
+  @override
+  void dispose() {
+    _localCheckTimer?.cancel();
+    _subscription?.cancel();
+    super.dispose();
   }
 }
