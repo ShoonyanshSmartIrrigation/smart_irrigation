@@ -150,8 +150,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  "Note: Enabling this will sync it with ESP32. Only one schedule can be active on the device at a time.",
-                  style: TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.w500),
+                  "Set the time and frequency for automated watering. Multiple schedules can be active.",
+                  style: TextStyle(fontSize: 12, color: AppColors.grey, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 15),
                 TextFormField(
@@ -228,7 +228,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         value: frequency,
-                        decoration: const InputDecoration(labelText: "Frequency", border: OutlineInputBorder()),
+                        decoration: InputDecoration(
+                          labelText: "Frequency", 
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                        ),
                         items: ["Daily", "Weekly", "Mon-Wed-Fri", "Weekends"]
                             .map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
                         onChanged: (val) => setModalState(() => frequency = val!),
@@ -238,8 +241,17 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     Expanded(
                       child: DropdownButtonFormField<int>(
                         value: duration,
-                        decoration: const InputDecoration(labelText: "Duration (min)", border: OutlineInputBorder()),
-                        items: [5, 10, 15, 20, 30].map((d) => DropdownMenuItem(value: d, child: Text("$d min"))).toList(),
+                        menuMaxHeight: 300,
+                        decoration: InputDecoration(
+                          labelText: "Duration (min)", 
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                        ),
+                        items: List.generate(60, (index) => index + 1)
+                            .map((d) => DropdownMenuItem(
+                                  value: d, 
+                                  child: Text("$d min"),
+                                ))
+                            .toList(),
                         onChanged: (val) => setModalState(() => duration = val!),
                       ),
                     ),

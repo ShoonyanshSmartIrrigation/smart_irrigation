@@ -145,17 +145,12 @@ class ScheduleService extends ChangeNotifier {
 
   Future<void> addSchedule(WateringSchedule schedule) async {
     try {
-      if (schedule.isEnabled) {
-        await _disableAllSchedulesInFirebase();
-      }
-
+      // Removed mutual exclusivity to allow multiple enabled schedules
       await _db.ref("$_basePath/${schedule.id}").set(schedule.toJson());
       
       if (schedule.isEnabled) {
         await _syncToEsp32(schedule);
       }
-      
-      // The listener will catch the database change and update the UI
     } catch (e) {
       debugPrint("ScheduleService Add Error: $e");
       rethrow;
@@ -164,10 +159,7 @@ class ScheduleService extends ChangeNotifier {
 
   Future<void> updateSchedule(WateringSchedule schedule) async {
     try {
-      if (schedule.isEnabled) {
-        await _disableAllSchedulesInFirebase(excludeId: schedule.id);
-      }
-
+      // Removed mutual exclusivity to allow multiple enabled schedules
       await _db.ref("$_basePath/${schedule.id}").update(schedule.toJson());
       
       if (schedule.isEnabled) {
@@ -175,8 +167,6 @@ class ScheduleService extends ChangeNotifier {
       } else {
         await _stopEsp32Alarm();
       }
-      
-      // The listener will catch the database change and update the UI
     } catch (e) {
       debugPrint("ScheduleService Update Error: $e");
       rethrow;
@@ -195,8 +185,6 @@ class ScheduleService extends ChangeNotifier {
       if (schedule.isEnabled) {
         await _stopEsp32Alarm();
       }
-      
-      // The listener will catch the database change and update the UI
     } catch (e) {
       debugPrint("ScheduleService Delete Error: $e");
       rethrow;
@@ -211,14 +199,6 @@ class ScheduleService extends ChangeNotifier {
     } catch (e) {
        debugPrint("ScheduleService Toggle Error: $e");
        rethrow;
-    }
-  }
-
-  Future<void> _disableAllSchedulesInFirebase({String? excludeId}) async {
-    for (var s in _schedules) {
-      if (s.id != excludeId && s.isEnabled) {
-        await _db.ref("$_basePath/${s.id}").update({'isEnabled': false});
-      }
     }
   }
 
