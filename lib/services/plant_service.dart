@@ -81,11 +81,10 @@ class PlantService extends ChangeNotifier {
     try {
       final res = await http
           .get(Uri.parse("$baseUrl/api/moisture"))
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 2));
       
       if (res.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(res.body);
-        bool changed = false;
 
         for (var plant in _dataManager.plants) {
           String sensorKey = "sensor_${plant.id}";
@@ -93,7 +92,15 @@ class PlantService extends ChangeNotifier {
             int newMoisture = data[sensorKey]?["percent"] ?? plant.moistureLevel;
             if (plant.moistureLevel != newMoisture) {
               plant.moistureLevel = newMoisture;
-              changed = true;
+            }
+            
+            // Auto Mode logic based on thresholds
+            if (plant.isAutoMode) {
+              if (plant.moistureLevel < plant.minMoistureThreshold && !plant.isMotorOn) {
+                togglePlantMotor(plant, isOn: true);
+              } else if (plant.moistureLevel >= plant.maxMoistureThreshold && plant.isMotorOn) {
+                togglePlantMotor(plant, isOn: false);
+              }
             }
           }
         }

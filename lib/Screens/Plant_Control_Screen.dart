@@ -176,7 +176,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
               children: [
                 CircleAvatar(
                   backgroundColor: hasError
-                      ? AppColors.plantControlError.withOpacity(0.1)
+                      ? AppColors.plantControlError.withValues(alpha: 0.1)
                       : (plant.isMotorOn ? AppColors.plantControlIconBg : AppColors.background),
                   radius: 18,
                   child: Icon(
@@ -185,7 +185,16 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                     size: 18,
                   ),
                 ),
-                Text("#${plant.id}", style: const TextStyle(color: AppColors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
+                Row(
+                  children: [
+                    Text("#${plant.id}", style: const TextStyle(color: AppColors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () => _showPlantSettingsSheet(plant),
+                      child: const Icon(Icons.settings, size: 16, color: AppColors.grey),
+                    ),
+                  ],
+                ),
               ],
             ),
             Column(
@@ -199,8 +208,8 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
               children: [
                 Switch.adaptive(
                   value: plant.isMotorOn,
-                  activeColor: AppColors.primary,
-                  onChanged: _service.isTogglingAll ? null : (_) => _service.togglePlantMotor(plant),
+                  activeTrackColor: AppColors.primary,
+                  onChanged: _service.isTogglingAll || plant.isAutoMode ? null : (_) => _service.togglePlantMotor(plant),
                 ),
                 Text(
                   hasError ? "OFFLINE" : (plant.isMotorOn ? "ACTIVE" : "INACTIVE"),
@@ -216,6 +225,87 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  void _showPlantSettingsSheet(Plant plant) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                left: 20, right: 20, top: 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text("Settings - ${plant.name}", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text("Auto Mode", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      Switch.adaptive(
+                        value: plant.isAutoMode,
+                        activeTrackColor: AppColors.primary,
+                        onChanged: (val) {
+                          setModalState(() => plant.isAutoMode = val);
+                          setState(() {});
+                        },
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  const Text("Minimum Moisture (Auto-Start)", style: TextStyle(fontSize: 14)),
+                  Slider(
+                    value: plant.minMoistureThreshold.toDouble(),
+                    min: 0,
+                    max: 100,
+                    divisions: 100,
+                    label: "${plant.minMoistureThreshold}%",
+                    activeColor: AppColors.plantControlMoistureLow,
+                    onChanged: plant.isAutoMode ? (val) {
+                      if (val >= plant.maxMoistureThreshold) return;
+                      setModalState(() => plant.minMoistureThreshold = val.toInt());
+                    } : null,
+                  ),
+                  const SizedBox(height: 10),
+                  const Text("Maximum Moisture (Auto-Stop)", style: TextStyle(fontSize: 14)),
+                  Slider(
+                    value: plant.maxMoistureThreshold.toDouble(),
+                    min: 0,
+                    max: 100,
+                    divisions: 100,
+                    label: "${plant.maxMoistureThreshold}%",
+                    activeColor: AppColors.plantControlMoistureHigh,
+                    onChanged: plant.isAutoMode ? (val) {
+                      if (val <= plant.minMoistureThreshold) return;
+                      setModalState(() => plant.maxMoistureThreshold = val.toInt());
+                    } : null,
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                      onPressed: () { 
+                        Navigator.pop(context); 
+                        setState(() {}); 
+                      },
+                      child: const Text("Save", style: TextStyle(color: Colors.white)),
+                    ),
+                  )
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

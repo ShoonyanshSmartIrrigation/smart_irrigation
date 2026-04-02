@@ -156,9 +156,9 @@ class DataManager {
     }
   }
 
-  // void simulateMoisture() {
-  //   for (var plant in plants) {
-  //     plant.moistureLevel = 30 + Random().nextInt(40);
-  //   }
-  // }
+  void simulateMoisture() {
+    for (var plant in plants) {
+      plant.moistureLevel = 30 + Random().nextInt(40);
+    }
+  }
 }
