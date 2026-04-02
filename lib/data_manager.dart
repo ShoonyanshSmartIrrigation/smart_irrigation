@@ -27,6 +27,8 @@ class DataManager {
   factory DataManager() => _instance;
   DataManager._internal();
 
+  bool isSystemAutoMode = false;
+
   List<Plant> plants = List.generate(8, (index) {
     return Plant(
       id: index + 1,

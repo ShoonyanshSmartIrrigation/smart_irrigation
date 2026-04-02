@@ -313,13 +313,14 @@ class DashboardService extends ChangeNotifier {
       // Act as Master Switch: Toggle ALL motors on/off
       bool success = await _esp32Service.toggleAllMotors(value).timeout(const Duration(seconds: 5));
       _updateState(() {
-        if (success) {
-          mainMotor = value;
-          mainPumpError = false;
-          
-          // Update DataManager state to reflect on Plant Control Screen
-          _dataManager.mainMotorOn = value;
-          _dataManager.updateAllMotorsLocally(value);
+          if (success) {
+            mainMotor = value;
+            mainPumpError = false;
+            
+            // Update DataManager state to reflect on Plant Control Screen
+            _dataManager.mainMotorOn = value;
+            _dataManager.isSystemAutoMode = value;
+            _dataManager.updateAllMotorsLocally(value);
           
           // Notify PlantService to update UI on Plant Control Screen
           try {
@@ -359,6 +360,7 @@ class DashboardService extends ChangeNotifier {
           autoModeError = false;
 
           // Also update individual motors for the Plant Control screen
+          _dataManager.isSystemAutoMode = value;
           _dataManager.updateAllMotorsLocally(value);
           try {
             PlantService().notifyListeners();

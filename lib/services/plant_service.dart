@@ -94,14 +94,14 @@ class PlantService extends ChangeNotifier {
               plant.moistureLevel = newMoisture;
             }
             
-            // Auto Mode logic based on thresholds
-            if (plant.isAutoMode) {
-              if (plant.moistureLevel < plant.minMoistureThreshold && !plant.isMotorOn) {
-                togglePlantMotor(plant, isOn: true);
-              } else if (plant.moistureLevel >= plant.maxMoistureThreshold && plant.isMotorOn) {
-                togglePlantMotor(plant, isOn: false);
+              // Auto Mode logic based on thresholds
+              if (plant.isAutoMode && !_dataManager.isSystemAutoMode) {
+                if (plant.moistureLevel < plant.minMoistureThreshold && !plant.isMotorOn) {
+                  togglePlantMotor(plant, isOn: true);
+                } else if (plant.moistureLevel >= plant.maxMoistureThreshold && plant.isMotorOn) {
+                  togglePlantMotor(plant, isOn: false);
+                }
               }
-            }
           }
         }
         
