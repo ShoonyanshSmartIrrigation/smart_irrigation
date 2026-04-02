@@ -10,7 +10,7 @@ plugins {
 
 android {
     namespace = "com.example.smartirrigation"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36 // Manually set to support newer permissions
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -27,8 +27,8 @@ android {
         applicationId = "com.example.smartirrigation"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        minSdk = 24 // Minimum SDK for wifi_scan
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

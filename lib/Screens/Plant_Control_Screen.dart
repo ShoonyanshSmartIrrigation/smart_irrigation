@@ -49,7 +49,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
       body: Column(
         children: [
           _buildStatsHeader(totalMotors, activeMotors),
-          const SizedBox(height: 100),
+          const SizedBox(height: 50),
           Expanded(
             child: GridView.builder(
               padding: const EdgeInsets.all(15),
@@ -103,7 +103,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
           ),
         ),
         Positioned(
-          bottom: -100,
+          bottom: -45,
           left: 20,
           right: 20,
           child: Card(
@@ -121,56 +121,6 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                       _statItem("TOTAL PLANTS", totalMotors.toString(), Icons.grass_rounded),
                       Container(width: 1, height: 30, color: AppColors.plantControlDivider),
                       _statItem("ACTIVE", activeMotors.toString(), Icons.water_drop_rounded),
-                    ],
-                  ),
-                  const Divider(height: 30, color: AppColors.plantControlDivider),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "MASTER CONTROLS",
-                              style: TextStyle(
-                                color: _service.allMotorsError ? AppColors.plantControlError : AppColors.black87,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            if (_service.allMotorsError)
-                              const Text(
-                                "CONNECTION FAILED",
-                                style: TextStyle(color: AppColors.plantControlError, fontSize: 11),
-                              ),
-                          ],
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          ElevatedButton(
-                            onPressed: _service.isTogglingAll ? null : () => _service.toggleAllMotors(true),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: AppColors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                            child: const Text("Start"),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: _service.isTogglingAll ? null : () => _service.toggleAllMotors(false),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.plantControlError,
-                              foregroundColor: AppColors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                            child: const Text("Stop"),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                 ],

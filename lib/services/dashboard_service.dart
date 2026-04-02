@@ -3,8 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:wifi_scan/wifi_scan.dart';
+import 'package:wifi_iot/wifi_iot.dart';
+import 'package:http/http.dart' as http;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../data_manager.dart';
 import 'esp32_service.dart';
+import 'plant_service.dart';
 
 class DashboardStrings {
   static const disconnected = "DISCONNECTED";
@@ -21,6 +27,7 @@ class DashboardService extends ChangeNotifier {
   final DataManager _dataManager = DataManager();
   final Esp32Service _esp32Service = Esp32Service();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   late SharedPreferences _prefs;
 
   // State
@@ -32,6 +39,12 @@ class DashboardService extends ChangeNotifier {
   bool autoModeError = false;
   int timerSeconds = 60;
   int selectedMinutes = 1;
+
+  // Device Setup State
+  bool isDeviceConfigured = true; 
+  bool isConfiguringDevice = false;
+  List<dynamic> scannedNetworks = []; 
+  String? configurationError;
 
   // Internal flags
   bool _isDisposed = false;
@@ -53,6 +66,7 @@ class DashboardService extends ChangeNotifier {
     try {
       _prefs = await SharedPreferences.getInstance();
       await loadUserData();
+      await checkDeviceConfiguration();
       
       if (!_isInitialized) {
         _setupConnectivityListener();
@@ -87,14 +101,22 @@ class DashboardService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> checkDeviceConfiguration() async {
+    isDeviceConfigured = _prefs.getBool('isDeviceConfigured') ?? false;
+    notifyListeners();
+  }
+
+  Future<void> setDeviceConfigured(bool value) async {
+    await _prefs.setBool('isDeviceConfigured', value);
+    _updateState(() => isDeviceConfigured = value);
+  }
+
   Future<void> loadUserData() async {
     try {
-      // 🔴 FIX: Using FlutterSecureStorage to get the real name, matching AuthService & SettingsService
       final name = await _secureStorage.read(key: 'userName');
       if (name != null && name.isNotEmpty) {
         _updateState(() => userName = name);
       } else {
-        // Fallback to SharedPreferences if secure storage is empty
         final legacyName = _prefs.getString('userName') ?? "Farmer";
         _updateState(() => userName = legacyName);
       }
@@ -103,6 +125,146 @@ class DashboardService extends ChangeNotifier {
     }
   }
 
+  Future<void> startWifiScan() async {
+    debugPrint("DashboardService: Starting WiFi Scan...");
+    _updateState(() {
+      isConfiguringDevice = true;
+      configurationError = null;
+      scannedNetworks = [];
+    });
+
+    try {
+      if (!await WiFiForIoTPlugin.isEnabled()) {
+        await WiFiForIoTPlugin.setEnabled(true);
+        await Future.delayed(const Duration(seconds: 2));
+      }
+
+      PermissionStatus status = await Permission.locationWhenInUse.request();
+      if (status.isDenied) throw "Location permission required.";
+
+      if (!await Permission.location.serviceStatus.isEnabled) {
+        throw "Please turn ON GPS to scan for devices.";
+      }
+
+      List<dynamic> results = [];
+      final canScan = await WiFiScan.instance.canStartScan();
+      if (canScan == CanStartScan.yes) {
+        await WiFiScan.instance.startScan();
+        await Future.delayed(const Duration(seconds: 4));
+        results = await WiFiScan.instance.getScannedResults();
+      }
+
+      if (results.isEmpty) {
+        final legacy = await WiFiForIoTPlugin.loadWifiList();
+        if (legacy != null) results = legacy;
+      }
+
+      // Sort: ESP32 SSIDs first
+      results.sort((a, b) {
+        String ssidA = (a is WiFiAccessPoint) ? a.ssid : (a.ssid ?? "");
+        String ssidB = (b is WiFiAccessPoint) ? b.ssid : (b.ssid ?? "");
+        bool isAEsp = ssidA.toUpperCase().contains("ESP32");
+        bool isBEsp = ssidB.toUpperCase().contains("ESP32");
+        if (isAEsp && !isBEsp) return -1;
+        if (!isAEsp && isBEsp) return 1;
+        return ssidA.compareTo(ssidB);
+      });
+
+      _updateState(() {
+        scannedNetworks = results;
+        isConfiguringDevice = false;
+        if (results.isEmpty) configurationError = "No devices found. Ensure ESP32 is nearby.";
+      });
+
+    } catch (e) {
+      _updateState(() {
+        configurationError = e.toString();
+        isConfiguringDevice = false;
+      });
+    }
+  }
+
+  Future<bool> connectToEspHotspot(String ssid, String password) async {
+    _updateState(() {
+      isConfiguringDevice = true;
+      configurationError = null;
+    });
+
+    try {
+      debugPrint("DashboardService: Connecting to Hotspot $ssid...");
+      bool connected = await WiFiForIoTPlugin.connect(
+        ssid,
+        password: password,
+        security: password.isEmpty ? NetworkSecurity.NONE : NetworkSecurity.WPA,
+        joinOnce: true,
+        withInternet: false,
+      ).timeout(const Duration(seconds: 25));
+
+      if (!connected) throw "Could not connect to $ssid.";
+
+      // Force WiFi usage for local requests (Fixes 404/Mobile data issues)
+      await WiFiForIoTPlugin.forceWifiUsage(true);
+      
+      await Future.delayed(const Duration(seconds: 4));
+      _updateState(() => isConfiguringDevice = false);
+      return true;
+    } catch (e) {
+      _updateState(() {
+        configurationError = "Connection failed: $e";
+        isConfiguringDevice = false;
+      });
+      return false;
+    }
+  }
+
+  Future<bool> sendWifiCredentials(String homeSSID, String homePassword) async {
+    _updateState(() {
+      isConfiguringDevice = true;
+      configurationError = null;
+    });
+
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw "User not logged in.";
+      
+      final email = user.email ?? "";
+      final uid = user.uid;
+      
+      debugPrint("DashboardService: Sending data to 192.168.4.1...");
+      
+      // Ensure we stay on WiFi for this request
+      await WiFiForIoTPlugin.forceWifiUsage(true);
+
+      final response = await http.post(
+        Uri.parse('http://192.168.4.1/config'),
+        body: {
+          'ssid': homeSSID, 
+          'password': homePassword, 
+          'email': email,
+          'uid': uid,
+        },
+      ).timeout(const Duration(seconds: 15));
+
+      // Release WiFi lock after request
+      await WiFiForIoTPlugin.forceWifiUsage(false);
+
+      if (response.statusCode == 200) {
+        _updateState(() => isConfiguringDevice = false);
+        return true;
+      } else {
+        throw "ESP32 Rejected Request (Status: ${response.statusCode})";
+      }
+    } catch (e) {
+      await WiFiForIoTPlugin.forceWifiUsage(false);
+      _updateState(() {
+        configurationError = "Setup failed: $e. Check connection to device.";
+        isConfiguringDevice = false;
+      });
+      return false;
+    }
+  }
+
+  // --- Normal Dashboard Logic ---
   void _setupConnectivityListener() {
     _connectivitySubscription?.cancel();
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
@@ -132,7 +294,6 @@ class DashboardService extends ChangeNotifier {
 
   Future<bool> checkEspConnection() async {
     if (_isDisposed) return false;
-    
     try {
       bool isConnected = await _esp32Service.checkConnection().timeout(const Duration(seconds: 5));
       _updateState(() {
@@ -147,14 +308,25 @@ class DashboardService extends ChangeNotifier {
 
   Future<bool> toggleMainPump(bool value) async {
     if (_isProcessingMainPump || _isDisposed) return false;
-    
     _isProcessingMainPump = true;
     try {
-      bool success = await _esp32Service.toggleMainMotor(value).timeout(const Duration(seconds: 5));
+      // Act as Master Switch: Toggle ALL motors on/off
+      bool success = await _esp32Service.toggleAllMotors(value).timeout(const Duration(seconds: 5));
       _updateState(() {
         if (success) {
           mainMotor = value;
           mainPumpError = false;
+          
+          // Update DataManager state to reflect on Plant Control Screen
+          _dataManager.mainMotorOn = value;
+          _dataManager.updateAllMotorsLocally(value);
+          
+          // Notify PlantService to update UI on Plant Control Screen
+          try {
+            PlantService().notifyListeners();
+          } catch (e) {
+            debugPrint("Error notifying PlantService: $e");
+          }
         } else {
           _setMainPumpError();
         }
@@ -178,7 +350,6 @@ class DashboardService extends ChangeNotifier {
 
   Future<bool> toggleAllMotors(bool value) async {
     if (_isProcessingAutoMode || _isDisposed) return false;
-
     _isProcessingAutoMode = true;
     try {
       bool success = await _esp32Service.toggleAllMotors(value).timeout(const Duration(seconds: 5));
@@ -186,11 +357,17 @@ class DashboardService extends ChangeNotifier {
         if (success) {
           autoMode = value;
           autoModeError = false;
-          if (value) {
-            startIrrigationTimer();
-          } else {
-            stopIrrigationTimer();
+
+          // Also update individual motors for the Plant Control screen
+          _dataManager.updateAllMotorsLocally(value);
+          try {
+            PlantService().notifyListeners();
+          } catch (e) {
+            debugPrint("Error notifying PlantService: $e");
           }
+
+          if (value) startIrrigationTimer();
+          else stopIrrigationTimer();
         } else {
           _setAutoModeError();
         }
@@ -213,20 +390,11 @@ class DashboardService extends ChangeNotifier {
 
   void startIrrigationTimer() {
     _updateState(() => timerSeconds = selectedMinutes * 60);
-    
     _irrigationTimer?.cancel();
     _irrigationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_isDisposed) {
-        timer.cancel();
-        return;
-      }
-
-      if (timerSeconds > 0) {
-        _updateState(() => timerSeconds--);
-      } else {
-        timer.cancel();
-        _finalizeIrrigation();
-      }
+      if (_isDisposed) { timer.cancel(); return; }
+      if (timerSeconds > 0) _updateState(() => timerSeconds--);
+      else { timer.cancel(); _finalizeIrrigation(); }
     });
   }
 

@@ -58,15 +58,18 @@ class AuthService {
 
   // Create User Node in Firebase Realtime Database
   Future<void> _createUserInDatabase(User user, {String? phone}) async {
-    final DatabaseReference userRef = FirebaseDatabase.instance.ref().child('users').child(user.uid);
+    // Sanitize email to use as key (Firebase keys cannot contain '.', '#', '$', '[', or ']')
+    final String userKey = user.email!.replaceAll('.', ',');
+    final DatabaseReference userRef = FirebaseDatabase.instance.ref().child('users').child(userKey);
     
-    // Check if users/{uid} already exists
+    // Check if users/{userKey} already exists
     final snapshot = await userRef.get();
     if (snapshot.exists) return;
 
     // Create node if it doesn't exist
     await userRef.set({
       "profile": {
+        "uid": user.uid, // Still store the actual UID for reference
         "name": user.displayName ?? "User",
         "email": user.email ?? "",
         "phone": phone ?? "",
@@ -151,7 +154,10 @@ class AuthService {
           name: user.displayName ?? "User",
           email: user.email ?? "",
         );
-        await _createUserInDatabase(user);
+        
+        // Fetch phone number from storage if available to pass to database creation
+        final storedPhone = await _secureStorage.read(key: 'userPhone');
+        await _createUserInDatabase(user, phone: storedPhone);
       }
       return user;
     } on FirebaseAuthException catch (e) {

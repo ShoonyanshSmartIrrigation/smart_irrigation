@@ -20,20 +20,329 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _service.onIrrigationComplete = _playAlarm;
-    _service.init();
+    _service.init().then((_) {
+      if (!_service.isDeviceConfigured) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showDeviceSetupSheet();
+        });
+      }
+    });
     _service.addListener(_onServiceUpdate);
   }
 
   @override
   void dispose() {
     _service.removeListener(_onServiceUpdate);
-    // ✅ Do NOT call _service.dispose() here because DashboardService is a Singleton.
-    // Disposing it here would prevent it from being used again when the screen is rebuilt.
     super.dispose();
   }
 
   void _onServiceUpdate() {
     if (mounted) setState(() {});
+  }
+
+  void _showDeviceSetupSheet() {
+    int setupStep = 0; // 0: Select Hotspot, 1: Enter Credentials, 2: Success
+    final ssidController = TextEditingController();
+    final passwordController = TextEditingController();
+    bool obscurePassword = true;
+
+    _service.startWifiScan();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: true,
+      enableDrag: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return ListenableBuilder(
+          listenable: _service,
+          builder: (context, child) {
+            return StatefulBuilder(
+              builder: (context, setModalState) {
+                return WillPopScope(
+                  onWillPop: () async => true,
+                  child: Container(
+                    padding: EdgeInsets.only(
+                      top: 20,
+                      left: 24,
+                      right: 24,
+                      bottom: MediaQuery.of(context).viewInsets.bottom + 30,
+                    ),
+                    decoration: const BoxDecoration(
+                      color: AppColors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(30),
+                        topRight: Radius.circular(30),
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[300],
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        const SizedBox(height: 25),
+                        if (setupStep == 0) ...[
+                          const Text(
+                            "Setup Your Device",
+                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            "Select your ESP32 hotspot to begin",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: AppColors.grey),
+                          ),
+                          const SizedBox(height: 20),
+                          if (_service.isConfiguringDevice && _service.scannedNetworks.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.all(20.0),
+                              child: Column(
+                                children: [
+                                  CircularProgressIndicator(color: AppColors.primary),
+                                  SizedBox(height: 12),
+                                  Text("Searching for device...", style: TextStyle(fontSize: 14, color: AppColors.grey)),
+                                ],
+                              ),
+                            )
+                          else if (_service.configurationError != null && _service.scannedNetworks.isEmpty)
+                            Column(
+                              children: [
+                                const Icon(Icons.error_outline, color: Colors.red, size: 40),
+                                const SizedBox(height: 10),
+                                Text(_service.configurationError!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+                                const SizedBox(height: 10),
+                                TextButton.icon(
+                                  onPressed: () => _service.startWifiScan(),
+                                  icon: const Icon(Icons.refresh),
+                                  label: const Text("Retry Scan"),
+                                ),
+                              ],
+                            )
+                          else
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text("Devices Found", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                    IconButton(
+                                      icon: const Icon(Icons.refresh, color: AppColors.primary),
+                                      onPressed: () => _service.startWifiScan(),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(
+                                  height: 250,
+                                  child: ListView.builder(
+                                    itemCount: _service.scannedNetworks.length,
+                                    itemBuilder: (context, index) {
+                                      final network = _service.scannedNetworks[index];
+                                      final ssid = network.ssid;
+                                      final isEsp = ssid.toUpperCase().contains("ESP32");
+                                      
+                                      return Card(
+                                        elevation: 0,
+                                        color: isEsp ? AppColors.primary.withOpacity(0.05) : Colors.grey[50],
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                          side: BorderSide(color: isEsp ? AppColors.primary.withOpacity(0.3) : Colors.transparent),
+                                        ),
+                                        child: ListTile(
+                                          leading: Icon(Icons.wifi, color: isEsp ? AppColors.primary : Colors.grey),
+                                          title: Text(ssid.isEmpty ? "[Hidden]" : ssid, style: TextStyle(fontWeight: isEsp ? FontWeight.bold : FontWeight.normal)),
+                                          subtitle: isEsp ? const Text("Tap to configure", style: TextStyle(color: AppColors.primary, fontSize: 11)) : null,
+                                          trailing: const Icon(Icons.chevron_right, size: 20),
+                                          onTap: () async {
+                                            final hotspotPwdController = TextEditingController(text: "12345678");
+                                            final bool? shouldConnect = await showDialog<bool>(
+                                              context: context,
+                                              builder: (context) => AlertDialog(
+                                                title: Text("Connect to $ssid"),
+                                                content: Column(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    const Text("Enter the password for the device's hotspot:"),
+                                                    const SizedBox(height: 15),
+                                                    TextField(
+                                                      controller: hotspotPwdController,
+                                                      decoration: InputDecoration(
+                                                        labelText: "Hotspot Password",
+                                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                                      ),
+                                                      obscureText: true,
+                                                    ),
+                                                  ],
+                                                ),
+                                                actions: [
+                                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("CANCEL")),
+                                                  ElevatedButton(
+                                                    onPressed: () => Navigator.pop(context, true),
+                                                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                                                    child: const Text("CONNECT"),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+
+                                            if (shouldConnect == true) {
+                                              bool connected = await _service.connectToEspHotspot(ssid, hotspotPwdController.text);
+                                              if (connected) {
+                                                setModalState(() {
+                                                  setupStep = 1;
+                                                });
+                                              }
+                                            }
+                                          },
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          const SizedBox(height: 15),
+                          SizedBox(
+                            width: double.infinity,
+                            child: TextButton(
+                              onPressed: () {
+                                _service.setDeviceConfigured(true);
+                                Navigator.pop(context);
+                              },
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              child: const Text(
+                                "Skip for now",
+                                style: TextStyle(
+                                  color: AppColors.grey,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ] else if (setupStep == 1) ...[
+                          const Text(
+                            "WiFi Configuration",
+                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            "Enter your Home WiFi details for the device",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: AppColors.grey),
+                          ),
+                          const SizedBox(height: 25),
+                          TextField(
+                            controller: ssidController,
+                            decoration: InputDecoration(
+                              labelText: "Home WiFi Name (SSID)",
+                              prefixIcon: const Icon(Icons.wifi),
+                              filled: true,
+                              fillColor: Colors.grey[50],
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                            ),
+                          ),
+                          const SizedBox(height: 15),
+                          TextField(
+                            controller: passwordController,
+                            obscureText: obscurePassword,
+                            decoration: InputDecoration(
+                              labelText: "Home WiFi Password",
+                              prefixIcon: const Icon(Icons.lock_outline),
+                              suffixIcon: IconButton(
+                                icon: Icon(obscurePassword ? Icons.visibility_off : Icons.visibility),
+                                onPressed: () => setModalState(() => obscurePassword = !obscurePassword),
+                              ),
+                              filled: true,
+                              fillColor: Colors.grey[50],
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                            ),
+                          ),
+                          if (_service.configurationError != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 15),
+                              child: Text(_service.configurationError!, style: const TextStyle(color: Colors.red, fontSize: 12), textAlign: TextAlign.center),
+                            ),
+                          const SizedBox(height: 25),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 55,
+                            child: ElevatedButton(
+                              onPressed: _service.isConfiguringDevice 
+                                ? null 
+                                : () async {
+                                    bool success = await _service.sendWifiCredentials(
+                                      ssidController.text.trim(),
+                                      passwordController.text.trim(),
+                                    );
+                                    if (success) {
+                                      setModalState(() => setupStep = 2);
+                                    }
+                                  },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                                elevation: 0,
+                              ),
+                              child: _service.isConfiguringDevice 
+                                ? const CircularProgressIndicator(color: Colors.white)
+                                : const Text("SEND TO DEVICE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => setModalState(() => setupStep = 0),
+                            child: const Text("Back", style: TextStyle(color: AppColors.grey)),
+                          ),
+                        ] else if (setupStep == 2) ...[
+                          const Icon(Icons.check_circle_rounded, color: Colors.green, size: 80),
+                          const SizedBox(height: 20),
+                          const Text(
+                            "Setup Complete!",
+                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 10),
+                          const Text(
+                            "Your ESP32 is connecting to your WiFi. It will appear online in a moment.",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: AppColors.grey),
+                          ),
+                          const SizedBox(height: 30),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 55,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                _service.setDeviceConfigured(true);
+                                Navigator.pop(context);
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                                elevation: 0,
+                              ),
+                              child: const Text("FINISH", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
   }
 
   void _showTimerPicker() {
@@ -48,99 +357,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Container(
-              padding: const EdgeInsets.only(top: 20, bottom: 30),
+              height: MediaQuery.of(context).size.height * 0.6,
               decoration: const BoxDecoration(
                 color: AppColors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(40),
-                  topRight: Radius.circular(40),
-                ),
-                boxShadow: [
-                  BoxShadow(color: Colors.black26, blurRadius: 20, spreadRadius: 5),
-                ],
+                borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
               ),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 50,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  const SizedBox(height: 25),
-                  const Text(
-                    "Set Irrigation Duration",
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.dashboardTextDark,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    "Select how long you want to irrigate",
-                    style: TextStyle(color: AppColors.grey, fontSize: 14),
-                  ),
-                  const SizedBox(height: 30),
-                  // Quick Selection Row
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      children: [5, 10, 15, 30, 45, 60].map((mins) {
-                        bool isSelected = tempMinutes == mins;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 10),
-                          child: ChoiceChip(
-                            label: Text("$mins min"),
-                            selected: isSelected,
-                            onSelected: (selected) {
-                              if (selected) {
-                                setModalState(() {
-                                  tempMinutes = mins;
-                                  scrollController.animateToItem(
-                                    mins - 1,
-                                    duration: const Duration(milliseconds: 400),
-                                    curve: Curves.easeOutBack,
-                                  );
-                                });
-                                HapticFeedback.mediumImpact();
-                              }
-                            },
-                            selectedColor: AppColors.primary,
-                            backgroundColor: Colors.grey[100],
-                            labelStyle: TextStyle(
-                              color: isSelected ? AppColors.white : Colors.black87,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            side: BorderSide(
-                              color: isSelected ? Colors.transparent : Colors.grey[300]!,
-                            ),
-                            showCheckmark: false,
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
                   const SizedBox(height: 20),
-                  // Wheel Picker
-                  SizedBox(
-                    height: 200,
+                  Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))),
+                  const SizedBox(height: 30),
+                  const Text("Select Duration", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  const Text("How long should irrigation run?", style: TextStyle(fontSize: 14, color: AppColors.grey)),
+                  const SizedBox(height: 40),
+                  Expanded(
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
                         Container(
-                          height: 55,
-                          width: MediaQuery.of(context).size.width * 0.85,
+                          height: 60,
+                          width: MediaQuery.of(context).size.width * 0.8,
                           decoration: BoxDecoration(
-                            color: AppColors.dashboardWheelPickerBg.withValues(alpha: 0.6),
-                            borderRadius: BorderRadius.circular(18),
+                            color: AppColors.primary.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(15),
+                            border: Border.all(color: AppColors.primary.withOpacity(0.1), width: 1),
                           ),
                         ),
                         ListWheelScrollView.useDelegate(
@@ -203,6 +443,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 30),
                 ],
               ),
             );
@@ -462,8 +703,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildMainControls() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
+    return Container(
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
@@ -483,7 +723,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         children: [
           _buildToggleRow(
-            "Main Water Pump", 
+            "On All Motor",
             _service.mainMotor, 
             _service.mainPumpError ? Icons.wifi_off_rounded : Icons.power_settings_new_rounded, 
             (val) => _service.toggleMainPump(val),
@@ -563,11 +803,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Row(
               children: [
                 const Text("Irrigation Timer", style: TextStyle(color: AppColors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                if (!isRunning) IconButton(
-                  icon: const Icon(Icons.edit_calendar_rounded, color: Colors.green, size: 20),
-                  onPressed: _showTimerPicker,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                Visibility(
+                  visible: !isRunning,
+                  maintainSize: true,
+                  maintainAnimation: true,
+                  maintainState: true,
+                  child: IconButton(
+                    icon: const Icon(Icons.edit_calendar_rounded, color: Colors.green, size: 20),
+                    onPressed: _showTimerPicker,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
                 ),
               ],
             ),
@@ -600,12 +846,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Row(
       children: [
         Expanded(
-          child: _timerButton(isRunning ? "RUNNING" : "START", isRunning ? AppColors.primary.withValues(alpha: 0.5) : AppColors.primary, isRunning ? () {} : _service.startIrrigationTimer),
+          child: _timerButton(isRunning ? "RUNNING" : "START", isRunning ? AppColors.primary.withValues(alpha: 0.5) : AppColors.primary, isRunning ? () {} : () => _service.toggleAllMotors(true)),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: _timerButton("STOP", AppColors.dashboardStopButtonBg, () {
-            _service.stopIrrigationTimer();
+            _service.toggleAllMotors(false);
             FlutterRingtonePlayer().stop();
           }, textColor: Colors.redAccent),
         ),

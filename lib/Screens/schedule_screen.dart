@@ -19,7 +19,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   void initState() {
     super.initState();
     _service.addListener(_onServiceUpdate);
-    // Fetch schedules from ESP32 on init
+    // Fetch schedules from Firebase on init
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshSchedules());
   }
 
@@ -39,7 +39,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     try {
       await _service.fetchSchedules();
     } catch (e) {
-      _showError("Connection Error: Could not fetch schedules from ESP32. Check your WiFi connection.");
+      _showError("Error: Could not fetch schedules. Check your internet connection.");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -59,7 +59,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  // Time formatting for display (e.g. 08:30 PM)
   String _formatTimeOfDay(TimeOfDay tod) {
     final hour = tod.hourOfPeriod == 0 ? 12 : tod.hourOfPeriod;
     final period = tod.period == DayPeriod.am ? 'AM' : 'PM';
@@ -67,7 +66,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return "${hour.toString().padLeft(2, '0')}:$minute $period";
   }
 
-  // Convert ESP32 "HH:mm" string to display format
   String _formatTimeString(String timeStr) {
     try {
       final parts = timeStr.split(':');
@@ -78,7 +76,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
-  // Convert ESP32 "HH:mm" string to TimeOfDay for picker
   TimeOfDay _parseTimeString(String timeStr) {
     try {
       final parts = timeStr.split(':');
@@ -88,7 +85,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
-  // Convert TimeOfDay to "HH:mm" for ESP32 API
   String _timeToString(TimeOfDay tod) {
     return "${tod.hour.toString().padLeft(2, '0')}:${tod.minute.toString().padLeft(2, '0')}";
   }
@@ -152,7 +148,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 25),
+                const SizedBox(height: 10),
+                const Text(
+                  "Note: Enabling this will sync it with ESP32. Only one schedule can be active on the device at a time.",
+                  style: TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 15),
                 TextFormField(
                   initialValue: title,
                   decoration: InputDecoration(
@@ -187,7 +188,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ),
                 const Divider(),
                 const SizedBox(height: 10),
-                const Text("Select Motors", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const Text("Select Plants (Main Motor is always included)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 10,
@@ -263,14 +264,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       try {
                         if (schedule == null) {
                           await _service.addSchedule(newSchedule);
-                          _showSuccess("Schedule added successfully to ESP32");
+                          _showSuccess("Schedule added and synced");
                         } else {
                           await _service.updateSchedule(newSchedule);
-                          _showSuccess("Schedule updated successfully on ESP32");
+                          _showSuccess("Schedule updated and synced");
                         }
                         if (mounted) Navigator.pop(context);
                       } catch (e) {
-                        _showError("Failed to save schedule. Check ESP32 WiFi connection.");
+                        _showError("Failed to save schedule. Check ESP32 connection.");
                       }
                     },
                     style: ElevatedButton.styleFrom(
@@ -339,7 +340,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               TextButton.icon(
                 onPressed: _refreshSchedules,
                 icon: const Icon(Icons.refresh, color: AppColors.primary),
-                label: const Text("Sync with ESP32", style: TextStyle(color: AppColors.primary)),
+                label: const Text("Sync Now", style: TextStyle(color: AppColors.primary)),
               )
             ],
           ),
@@ -375,7 +376,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             ],
           ),
           const SizedBox(height: 5),
-          const Text("Automate your irrigation system via ESP32 WiFi", style: TextStyle(color: Colors.white70, fontSize: 14)),
+          const Text("Automate irrigation via Firebase & ESP32", style: TextStyle(color: Colors.white70, fontSize: 14)),
         ],
       ),
     );
@@ -419,9 +420,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   onChanged: (val) async {
                     try {
                       await _service.toggleSchedule(schedule.id, val);
-                      _showSuccess("Schedule ${val ? 'enabled' : 'disabled'} on ESP32");
+                      _showSuccess(val ? "Schedule enabled & synced" : "Schedule disabled");
                     } catch (e) {
-                      _showError("Failed to toggle schedule");
+                      _showError("Failed to toggle schedule. Check ESP32.");
                     }
                   },
                 ),
@@ -445,7 +446,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           const SizedBox(width: 12),
                           Icon(Icons.settings_input_component_rounded, size: 14, color: AppColors.grey.withOpacity(0.5)),
                           const SizedBox(width: 4),
-                          Text("${schedule.selectedMotors.length} Motors", style: TextStyle(color: AppColors.grey.withOpacity(0.5))),
+                          Text("${schedule.selectedMotors.length} Plants", style: TextStyle(color: AppColors.grey.withOpacity(0.5))),
                         ],
                       ),
                     ],
@@ -470,7 +471,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Delete Schedule"),
-        content: const Text("Are you sure? This will permanently remove the schedule from ESP32."),
+        content: const Text("Are you sure? This will remove the schedule from Firebase and stop it on ESP32 if active."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
           ElevatedButton(
@@ -478,9 +479,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               Navigator.pop(context);
               try {
                 await _service.deleteSchedule(id); 
-                _showSuccess("Schedule deleted from ESP32");
+                _showSuccess("Schedule deleted");
               } catch (e) {
-                _showError("Failed to delete schedule. Check ESP32 connection.");
+                _showError("Failed to delete schedule.");
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.scheduleDeleteIcon),

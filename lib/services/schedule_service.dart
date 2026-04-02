@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class WateringSchedule {
   final String id;
@@ -68,10 +71,38 @@ class WateringSchedule {
 class ScheduleService extends ChangeNotifier {
   static final ScheduleService _instance = ScheduleService._internal();
   factory ScheduleService() => _instance;
-  ScheduleService._internal();
 
+  final FirebaseDatabase _db = FirebaseDatabase.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   List<WateringSchedule> _schedules = [];
   List<WateringSchedule> get schedules => _schedules;
+  StreamSubscription? _subscription;
+
+  ScheduleService._internal() {
+    _initListener();
+  }
+
+  String get _uid => _auth.currentUser?.uid ?? "anonymous";
+
+  void _initListener() {
+    _auth.authStateChanges().listen((user) {
+      _subscription?.cancel();
+      if (user != null) {
+        _subscription = _db.ref("schedule/${user.uid}").onValue.listen((event) {
+          if (event.snapshot.exists) {
+            final Map<dynamic, dynamic> data = event.snapshot.value as Map;
+            _schedules = data.entries.map((e) {
+              return WateringSchedule.fromJson(Map<String, dynamic>.from(e.value));
+            }).toList();
+            _schedules.sort((a, b) => a.time.compareTo(b.time));
+          } else {
+            _schedules = [];
+          }
+          notifyListeners();
+        });
+      }
+    });
+  }
 
   Future<String?> _getBaseUrl() async {
     try {
@@ -85,42 +116,32 @@ class ScheduleService extends ChangeNotifier {
   }
 
   Future<void> fetchSchedules() async {
-    final baseUrl = await _getBaseUrl();
-    if (baseUrl == null) throw Exception("ESP32 IP not configured");
-
+    // Listener already handles real-time updates, but we can do a manual fetch if needed
     try {
-      final response = await http
-          .get(Uri.parse("$baseUrl/schedule"))
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        _schedules = data.map((item) => WateringSchedule.fromJson(item)).toList();
+      final snapshot = await _db.ref("schedule/$_uid").get();
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic> data = snapshot.value as Map;
+        _schedules = data.entries.map((e) {
+          return WateringSchedule.fromJson(Map<String, dynamic>.from(e.value));
+        }).toList();
+        _schedules.sort((a, b) => a.time.compareTo(b.time));
         notifyListeners();
-      } else {
-        throw Exception("Failed to load schedules: ${response.statusCode}");
       }
     } catch (e) {
       debugPrint("ScheduleService Fetch Error: $e");
-      rethrow;
     }
   }
 
   Future<void> addSchedule(WateringSchedule schedule) async {
-    final baseUrl = await _getBaseUrl();
-    if (baseUrl == null) throw Exception("ESP32 IP not configured");
-
     try {
-      final response = await http.post(
-        Uri.parse("$baseUrl/schedule"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode(schedule.toJson()),
-      ).timeout(const Duration(seconds: 10));
+      if (schedule.isEnabled) {
+        await _disableAllSchedulesInFirebase();
+      }
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        await fetchSchedules();
-      } else {
-        throw Exception("Failed to add schedule: ${response.statusCode}");
+      await _db.ref("schedule/$_uid/${schedule.id}").set(schedule.toJson());
+      
+      if (schedule.isEnabled) {
+        await _syncToEsp32(schedule);
       }
     } catch (e) {
       debugPrint("ScheduleService Add Error: $e");
@@ -129,20 +150,17 @@ class ScheduleService extends ChangeNotifier {
   }
 
   Future<void> updateSchedule(WateringSchedule schedule) async {
-    final baseUrl = await _getBaseUrl();
-    if (baseUrl == null) throw Exception("ESP32 IP not configured");
-
     try {
-      final response = await http.put(
-        Uri.parse("$baseUrl/schedule"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode(schedule.toJson()),
-      ).timeout(const Duration(seconds: 10));
+      if (schedule.isEnabled) {
+        await _disableAllSchedulesInFirebase(excludeId: schedule.id);
+      }
 
-      if (response.statusCode == 200) {
-        await fetchSchedules();
+      await _db.ref("schedule/$_uid/${schedule.id}").update(schedule.toJson());
+      
+      if (schedule.isEnabled) {
+        await _syncToEsp32(schedule);
       } else {
-        throw Exception("Failed to update schedule: ${response.statusCode}");
+        await _stopEsp32Alarm();
       }
     } catch (e) {
       debugPrint("ScheduleService Update Error: $e");
@@ -151,18 +169,12 @@ class ScheduleService extends ChangeNotifier {
   }
 
   Future<void> deleteSchedule(String id) async {
-    final baseUrl = await _getBaseUrl();
-    if (baseUrl == null) throw Exception("ESP32 IP not configured");
-
     try {
-      final response = await http
-          .delete(Uri.parse("$baseUrl/schedule?id=$id"))
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        await fetchSchedules();
-      } else {
-        throw Exception("Failed to delete schedule: ${response.statusCode}");
+      final schedule = _schedules.firstWhere((s) => s.id == id);
+      await _db.ref("schedule/$_uid/$id").remove();
+      
+      if (schedule.isEnabled) {
+        await _stopEsp32Alarm();
       }
     } catch (e) {
       debugPrint("ScheduleService Delete Error: $e");
@@ -174,5 +186,59 @@ class ScheduleService extends ChangeNotifier {
     final schedule = _schedules.firstWhere((s) => s.id == id);
     final updated = schedule.copyWith(isEnabled: enabled);
     await updateSchedule(updated);
+  }
+
+  Future<void> _disableAllSchedulesInFirebase({String? excludeId}) async {
+    for (var s in _schedules) {
+      if (s.id != excludeId && s.isEnabled) {
+        await _db.ref("schedule/$_uid/${s.id}").update({'isEnabled': false});
+      }
+    }
+  }
+
+  Future<void> _syncToEsp32(WateringSchedule schedule) async {
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) throw Exception("ESP32 IP not configured");
+
+    try {
+      final timeParts = schedule.time.split(':');
+      
+      List<int> esp32Motors = [1]; // Always include Main Motor (ID 1)
+      for (var m in schedule.selectedMotors) {
+        esp32Motors.add(m + 1); // Map UI 1-8 to hardware IDs 2-9
+      }
+
+      final body = {
+        "hour": int.parse(timeParts[0]),
+        "minute": int.parse(timeParts[1]),
+        "duration": schedule.durationInMinutes,
+        "motors": esp32Motors,
+      };
+
+      final response = await http.post(
+        Uri.parse("$baseUrl/api/alarm/set"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode != 200) {
+        throw Exception("ESP32 responded with ${response.statusCode}");
+      }
+    } catch (e) {
+      debugPrint("Sync to ESP32 failed: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> _stopEsp32Alarm() async {
+    final baseUrl = await _getBaseUrl();
+    if (baseUrl == null) return;
+
+    try {
+      await http.post(Uri.parse("$baseUrl/api/alarm/stop"))
+          .timeout(const Duration(seconds: 5));
+    } catch (e) {
+      debugPrint("Stop ESP32 alarm failed: $e");
+    }
   }
 }
