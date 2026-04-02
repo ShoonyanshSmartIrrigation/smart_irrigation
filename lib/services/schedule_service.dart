@@ -82,24 +82,34 @@ class ScheduleService extends ChangeNotifier {
     _initListener();
   }
 
-  String get _uid => _auth.currentUser?.uid ?? "anonymous";
+  String get _userEmailKey => _auth.currentUser?.email?.replaceAll('.', ',') ?? "anonymous";
+  String get _basePath => "users/$_userEmailKey/schedule/data";
 
   void _initListener() {
     _auth.authStateChanges().listen((user) {
       _subscription?.cancel();
       if (user != null) {
-        _subscription = _db.ref("schedule/${user.uid}").onValue.listen((event) {
+        final emailKey = user.email?.replaceAll('.', ',') ?? "anonymous";
+        _subscription = _db.ref("users/$emailKey/schedule/data").onValue.listen((event) {
           if (event.snapshot.exists) {
-            final Map<dynamic, dynamic> data = event.snapshot.value as Map;
-            _schedules = data.entries.map((e) {
-              return WateringSchedule.fromJson(Map<String, dynamic>.from(e.value));
-            }).toList();
-            _schedules.sort((a, b) => a.time.compareTo(b.time));
+            try {
+              final Map<dynamic, dynamic> data = event.snapshot.value as Map;
+              _schedules = data.entries.map((e) {
+                return WateringSchedule.fromJson(Map<String, dynamic>.from(e.value));
+              }).toList();
+              _schedules.sort((a, b) => a.time.compareTo(b.time));
+            } catch (e) {
+              debugPrint("Error parsing schedules: $e");
+              _schedules = [];
+            }
           } else {
             _schedules = [];
           }
           notifyListeners();
         });
+      } else {
+        _schedules = [];
+        notifyListeners();
       }
     });
   }
@@ -116,17 +126,18 @@ class ScheduleService extends ChangeNotifier {
   }
 
   Future<void> fetchSchedules() async {
-    // Listener already handles real-time updates, but we can do a manual fetch if needed
     try {
-      final snapshot = await _db.ref("schedule/$_uid").get();
+      final snapshot = await _db.ref(_basePath).get();
       if (snapshot.exists) {
         final Map<dynamic, dynamic> data = snapshot.value as Map;
         _schedules = data.entries.map((e) {
           return WateringSchedule.fromJson(Map<String, dynamic>.from(e.value));
         }).toList();
         _schedules.sort((a, b) => a.time.compareTo(b.time));
-        notifyListeners();
+      } else {
+        _schedules = [];
       }
+      notifyListeners();
     } catch (e) {
       debugPrint("ScheduleService Fetch Error: $e");
     }
@@ -138,11 +149,13 @@ class ScheduleService extends ChangeNotifier {
         await _disableAllSchedulesInFirebase();
       }
 
-      await _db.ref("schedule/$_uid/${schedule.id}").set(schedule.toJson());
+      await _db.ref("$_basePath/${schedule.id}").set(schedule.toJson());
       
       if (schedule.isEnabled) {
         await _syncToEsp32(schedule);
       }
+      
+      // The listener will catch the database change and update the UI
     } catch (e) {
       debugPrint("ScheduleService Add Error: $e");
       rethrow;
@@ -155,13 +168,15 @@ class ScheduleService extends ChangeNotifier {
         await _disableAllSchedulesInFirebase(excludeId: schedule.id);
       }
 
-      await _db.ref("schedule/$_uid/${schedule.id}").update(schedule.toJson());
+      await _db.ref("$_basePath/${schedule.id}").update(schedule.toJson());
       
       if (schedule.isEnabled) {
         await _syncToEsp32(schedule);
       } else {
         await _stopEsp32Alarm();
       }
+      
+      // The listener will catch the database change and update the UI
     } catch (e) {
       debugPrint("ScheduleService Update Error: $e");
       rethrow;
@@ -170,12 +185,18 @@ class ScheduleService extends ChangeNotifier {
 
   Future<void> deleteSchedule(String id) async {
     try {
-      final schedule = _schedules.firstWhere((s) => s.id == id);
-      await _db.ref("schedule/$_uid/$id").remove();
+      final scheduleIndex = _schedules.indexWhere((s) => s.id == id);
+      if (scheduleIndex == -1) return;
+      
+      final schedule = _schedules[scheduleIndex];
+      
+      await _db.ref("$_basePath/$id").remove();
       
       if (schedule.isEnabled) {
         await _stopEsp32Alarm();
       }
+      
+      // The listener will catch the database change and update the UI
     } catch (e) {
       debugPrint("ScheduleService Delete Error: $e");
       rethrow;
@@ -183,15 +204,20 @@ class ScheduleService extends ChangeNotifier {
   }
 
   Future<void> toggleSchedule(String id, bool enabled) async {
-    final schedule = _schedules.firstWhere((s) => s.id == id);
-    final updated = schedule.copyWith(isEnabled: enabled);
-    await updateSchedule(updated);
+    try {
+      final schedule = _schedules.firstWhere((s) => s.id == id);
+      final updated = schedule.copyWith(isEnabled: enabled);
+      await updateSchedule(updated);
+    } catch (e) {
+       debugPrint("ScheduleService Toggle Error: $e");
+       rethrow;
+    }
   }
 
   Future<void> _disableAllSchedulesInFirebase({String? excludeId}) async {
     for (var s in _schedules) {
       if (s.id != excludeId && s.isEnabled) {
-        await _db.ref("schedule/$_uid/${s.id}").update({'isEnabled': false});
+        await _db.ref("$_basePath/${s.id}").update({'isEnabled': false});
       }
     }
   }
