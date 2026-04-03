@@ -11,6 +11,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../data_manager.dart';
 import 'esp32_service.dart';
 import 'plant_service.dart';
+import 'weather_service.dart';
 
 class DashboardStrings {
   static const disconnected = "DISCONNECTED";
@@ -40,6 +41,11 @@ class DashboardService extends ChangeNotifier {
   int timerSeconds = 60;
   int selectedMinutes = 1;
 
+  // Weather State
+  String weatherCondition = "Mostly Sunny";
+  String weatherTemp = "28°C";
+  String weatherIcon = "01d";
+
   // Device Setup State
   bool isDeviceConfigured = true; 
   bool isConfiguringDevice = false;
@@ -67,6 +73,7 @@ class DashboardService extends ChangeNotifier {
       _prefs = await SharedPreferences.getInstance();
       await loadUserData();
       await checkDeviceConfiguration();
+      await fetchWeatherData();
       
       if (!_isInitialized) {
         _setupConnectivityListener();
@@ -122,6 +129,17 @@ class DashboardService extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint("Error fetching username in DashboardService: $e");
+    }
+  }
+
+  Future<void> fetchWeatherData() async {
+    final data = await WeatherService().fetchWeather();
+    if (data != null && !_isDisposed) {
+      _updateState(() {
+        weatherTemp = "${data['main']['temp'].round()}°C";
+        weatherCondition = data['weather'][0]['main'];
+        weatherIcon = data['weather'][0]['icon'];
+      });
     }
   }
 

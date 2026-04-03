@@ -876,6 +876,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildWeatherCard() {
+    String iconUrl = "https://openweathermap.org/img/wn/${_service.weatherIcon}@2x.png";
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -886,16 +887,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Column(
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("WEATHER", style: TextStyle(color: AppColors.grey, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-              SizedBox(height: 4),
-              Text("Mostly Sunny", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              Text("28°C", style: TextStyle(color: AppColors.grey, fontSize: 14)),
+              const Text("WEATHER", style: TextStyle(color: AppColors.grey, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              const SizedBox(height: 4),
+              Text(_service.weatherCondition, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              Text(_service.weatherTemp, style: const TextStyle(color: AppColors.grey, fontSize: 14)),
             ],
           ),
-          Icon(Icons.wb_sunny_rounded, color: Colors.orange[400], size: 40),
+          Image.network(iconUrl, width: 50, height: 50, errorBuilder: (context, error, stackTrace) => Icon(Icons.wb_sunny_rounded, color: Colors.orange[400], size: 40)),
         ],
       ),
     );

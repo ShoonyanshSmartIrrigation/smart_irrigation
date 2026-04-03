@@ -40,7 +40,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             BuildHeader(
-              height: 220,
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -70,7 +69,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     Text(
                       _service.userName,
                       style: const TextStyle(
@@ -80,12 +79,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         letterSpacing: 0.5,
                       ),
                     ),
-                    const SizedBox(height: 2),
                     Text(
                       _service.userEmail,
                       style: TextStyle(
                         color: AppColors.white.withOpacity(0.8),
-                        fontSize: 13,
+                        fontSize: 14,
                         fontWeight: FontWeight.w400,
                       ),
                     ),

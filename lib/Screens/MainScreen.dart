@@ -54,13 +54,11 @@ class _MainScreenState extends State<MainScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        body: SafeArea( // ✅ UI safety
-          child: Container(
-            color: AppColors.background,
-            child: IndexedStack(
-              index: _currentIndex,
-              children: _screens,
-            ),
+        body: Container(
+          color: AppColors.background,
+          child: IndexedStack(
+            index: _currentIndex,
+            children: _screens,
           ),
         ),
         bottomNavigationBar: CustomBottomNavBar(

@@ -202,6 +202,11 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                 Text(plant.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 4),
                 Text("Moisture: ${plant.moistureLevel}%", style: TextStyle(color: moistureColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                if (plant.isAutoMode)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4.0),
+                    child: Text("AUTO MODE", style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
               ],
             ),
             Column(
