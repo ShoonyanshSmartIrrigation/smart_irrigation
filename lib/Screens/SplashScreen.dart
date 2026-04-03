@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../Routes/app_Routes.dart';
+import 'package:go_router/go_router.dart';
+import '../Routes/app_routes.dart';
 import '../Core/theme/app_colors.dart';
 
+//-------------------------------------------------------- SplashScreen Class ----------------------------------------------------------
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -11,9 +13,11 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
+//-------------------------------------------------------- _SplashScreenState Class ----------------------------------------------------------
 class _SplashScreenState extends State<SplashScreen> {
 
   @override
+    //-------------------------------------------------------- Init State ----------------------------------------------------------
   void initState() {
     super.initState();
     _initApp();
@@ -32,22 +36,20 @@ class _SplashScreenState extends State<SplashScreen> {
 
       if (!mounted) return;
 
-      Navigator.pushReplacementNamed(
-        context,
-        isLoggedIn ? AppRoutes.dashboard : AppRoutes.login,
-      );
+      context.go(isLoggedIn ? AppRoutes.dashboard : AppRoutes.login);
 
     } catch (e) {
       debugPrint("Splash Error: $e");
 
       if (!mounted) return;
 
-      // ✅ fallback navigation (important for production)
-      Navigator.pushReplacementNamed(context, AppRoutes.login);
+      // œ… fallback navigation (important for production)
+      context.go(AppRoutes.login);
     }
   }
 
   @override
+    //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
     return const Scaffold(
       backgroundColor: AppColors.splashBackground,

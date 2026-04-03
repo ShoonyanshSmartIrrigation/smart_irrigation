@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'Routes/app_Routes.dart';
+import 'Routes/app_routes.dart';
 import 'services/auth_service.dart';
 
 void main() async {
@@ -18,11 +18,13 @@ void main() async {
 }
 
 
+//-------------------------------------------------------- MyApp Class ----------------------------------------------------------
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
   @override
+    //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'Smart Irrigation',
       theme: ThemeData(
@@ -36,18 +38,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-
-      initialRoute: AppRoutes.splash,
-      routes: AppRoutes.routes,
-      onUnknownRoute: (settings) {
-        return MaterialPageRoute(
-          builder: (_) => const Scaffold(
-            body: Center(
-              child: Text("Page not found"),
-            ),
-          ),
-        );
-      },
+      routerConfig: AppRoutes.router,
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+//-------------------------------------------------------- CustomBottomNavBar Class ----------------------------------------------------------
 class CustomBottomNavBar extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
@@ -12,6 +13,7 @@ class CustomBottomNavBar extends StatelessWidget {
   });
 
   @override
+    //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
     const double barHeight = 70;
 
@@ -80,6 +82,7 @@ class CustomBottomNavBar extends StatelessWidget {
   }
 }
 
+//-------------------------------------------------------- NavItem Class ----------------------------------------------------------
 class NavItem extends StatelessWidget {
   final int index;
   final IconData icon;
@@ -97,6 +100,7 @@ class NavItem extends StatelessWidget {
   });
 
   @override
+    //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
     const double iconSize = 18;
     const double fontSize = 9;

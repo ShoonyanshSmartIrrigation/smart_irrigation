@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+//-------------------------------------------------------- Plant Class ----------------------------------------------------------
 class Plant {
   final int id;
   final String name;
@@ -22,6 +23,7 @@ class Plant {
   });
 }
 
+//-------------------------------------------------------- DataManager Class ----------------------------------------------------------
 class DataManager {
   static final DataManager _instance = DataManager._internal();
   factory DataManager() => _instance;

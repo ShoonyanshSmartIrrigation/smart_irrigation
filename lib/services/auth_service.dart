@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_database/firebase_database.dart';
 
+//-------------------------------------------------------- AuthException Class ----------------------------------------------------------
 class AuthException implements Exception {
   final String message;
   AuthException(this.message);
@@ -12,6 +13,7 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
+//-------------------------------------------------------- AuthService Class ----------------------------------------------------------
 class AuthService {
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;

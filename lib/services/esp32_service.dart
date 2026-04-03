@@ -1,29 +1,32 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:multicast_dns/multicast_dns.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 
+//-------------------------------------------------------- Esp32Service Class ----------------------------------------------------------
 class Esp32Service {
   static final Esp32Service _instance = Esp32Service._internal();
   factory Esp32Service() => _instance;
   Esp32Service._internal();
 
   // Connection Checking
-  Future<bool> checkConnection() async {
+  Future<Map<String, dynamic>?> getSystemStatus() async {
     final prefs = await SharedPreferences.getInstance();
     String? ip = prefs.getString("esp_ip");
     int port = prefs.getInt("esp_port") ?? 80;
 
-    if (ip == null || ip.isEmpty) return false;
+    if (ip == null || ip.isEmpty) return null;
 
     try {
       final response = await http.get(Uri.parse("http://$ip:$port/api/system/status"))
           .timeout(const Duration(seconds: 2));
-      return response.statusCode == 200;
-    } catch (_) {
-      return false;
-    }
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+    } catch (_) {}
+    return null;
   }
 
   // Motor Controls

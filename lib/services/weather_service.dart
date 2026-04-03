@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
 
+//-------------------------------------------------------- WeatherService Class ----------------------------------------------------------
 class WeatherService {
   final String _apiKey = "aaf10de736fe5c3690a1d341be26e920";
 

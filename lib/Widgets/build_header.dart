@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+//-------------------------------------------------------- BuildHeader Class ----------------------------------------------------------
 class BuildHeader extends StatelessWidget {
   final Widget child;
   final double? height;
@@ -16,6 +17,7 @@ class BuildHeader extends StatelessWidget {
   });
 
   @override
+    //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
     const borderRadius = BorderRadius.only(
       bottomLeft: Radius.circular(30),

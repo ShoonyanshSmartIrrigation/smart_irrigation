@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../services/plant_service.dart';
 import '../data_manager.dart';
 import '../Widgets/build_header.dart';
 import '../Core/theme/app_colors.dart';
 
+//-------------------------------------------------------- PlantControlScreen Class ----------------------------------------------------------
 class PlantControlScreen extends StatefulWidget {
   const PlantControlScreen({super.key});
   @override
   State<PlantControlScreen> createState() => _PlantControlScreenState();
 }
 
+//-------------------------------------------------------- _PlantControlScreenState Class ----------------------------------------------------------
 class _PlantControlScreenState extends State<PlantControlScreen> {
   final PlantService _service = PlantService();
 
   @override
+    //-------------------------------------------------------- Init State ----------------------------------------------------------
   void initState() {
     super.initState();
     _service.init();
@@ -21,6 +25,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
   }
 
   @override
+    //-------------------------------------------------------- Dispose Method ----------------------------------------------------------
   void dispose() {
     _service.removeListener(_onServiceUpdate);
     // ✅ Do NOT call _service.dispose() here because PlantService is a Singleton.
@@ -33,6 +38,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
   }
 
   @override
+    //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
     final plants = _service.getPlants();
     final totalMotors = plants.length;
@@ -43,7 +49,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
       floatingActionButton: FloatingActionButton(
         heroTag: 'plant_settings_fab',
         backgroundColor: AppColors.primary,
-        onPressed: () => Navigator.pushNamed(context, '/settings'),
+        onPressed: () => context.go('/settings'),
         child: const Icon(Icons.settings, color: AppColors.white),
       ),
       body: Column(

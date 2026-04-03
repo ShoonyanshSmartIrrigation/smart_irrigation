@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import '../services/auth_service.dart';
-import '../Routes/app_Routes.dart';
+import '../Routes/app_routes.dart';
+
 import '../Widgets/build_header.dart';
 import '../Core/theme/app_colors.dart';
 
+//-------------------------------------------------------- LoginScreen Class ----------------------------------------------------------
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -14,6 +18,7 @@ class LoginScreen extends StatefulWidget {
   _LoginScreenState createState() => _LoginScreenState();
 }
 
+//-------------------------------------------------------- _LoginScreenState Class ----------------------------------------------------------
 class _LoginScreenState extends State<LoginScreen> {
   final AuthService _authService = AuthService();
   final TextEditingController emailController = TextEditingController();
@@ -23,6 +28,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
 
   @override
+    //-------------------------------------------------------- Dispose Method ----------------------------------------------------------
   void dispose() {
     emailController.dispose();
     passwordController.dispose();
@@ -73,15 +79,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (user != null) {
         showToast("Login Successful!");
-        Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+        context.go(AppRoutes.dashboard);
       }
-    } on AuthException catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      showToast(e.message);
     } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
       showToast("An unexpected error occurred.");
     }
   }
@@ -99,11 +100,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (user != null) {
         showToast("Logged in with Google!");
-        Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+        context.go(AppRoutes.dashboard);
       }
-    } on AuthException catch (e) {
-      if (mounted) setState(() => _isLoading = false);
-      showToast(e.message);
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
       showToast("Google Sign-In failed.");
@@ -144,6 +142,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
+    //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.loginBackground,
@@ -295,13 +294,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text("Don't have an account?", style: TextStyle(color: AppColors.loginTextDarkGrey)),
+                      const Text("Don't have an account?", style: TextStyle(color: Colors.white70)),
                       TextButton(
-                        onPressed: () => Navigator.pushNamed(context, AppRoutes.signup),
-                        child: const Text(
-                          "Sign Up",
-                          style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 16),
-                        ),
+                        onPressed: () => context.push(AppRoutes.signup),
+                        child: const Text('Sign Up', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),

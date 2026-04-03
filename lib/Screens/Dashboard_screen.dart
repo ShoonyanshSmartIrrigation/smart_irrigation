@@ -5,6 +5,7 @@ import '../services/dashboard_service.dart';
 import '../Widgets/build_header.dart';
 import '../Core/theme/app_colors.dart';
 
+//-------------------------------------------------------- DashboardScreen Class ----------------------------------------------------------
 class DashboardScreen extends StatefulWidget {
   final Function(int)? onTabRequested;
   const DashboardScreen({super.key, this.onTabRequested});
@@ -13,10 +14,12 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
+//-------------------------------------------------------- _DashboardScreenState Class ----------------------------------------------------------
 class _DashboardScreenState extends State<DashboardScreen> {
   final DashboardService _service = DashboardService();
 
   @override
+    //-------------------------------------------------------- Init State ----------------------------------------------------------
   void initState() {
     super.initState();
     _service.onIrrigationComplete = _playAlarm;
@@ -31,6 +34,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   @override
+    //-------------------------------------------------------- Dispose Method ----------------------------------------------------------
   void dispose() {
     _service.removeListener(_onServiceUpdate);
     super.dispose();
@@ -492,6 +496,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   @override
+    //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,

@@ -4,6 +4,7 @@ import '../services/schedule_service.dart';
 import '../Widgets/build_header.dart';
 import '../Core/theme/app_colors.dart';
 
+//-------------------------------------------------------- ScheduleScreen Class ----------------------------------------------------------
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
 
@@ -11,12 +12,14 @@ class ScheduleScreen extends StatefulWidget {
   State<ScheduleScreen> createState() => _ScheduleScreenState();
 }
 
+//-------------------------------------------------------- _ScheduleScreenState Class ----------------------------------------------------------
 class _ScheduleScreenState extends State<ScheduleScreen> {
   final ScheduleService _service = ScheduleService();
   bool _isLoading = false;
   String? _togglingScheduleId;
 
   @override
+    //-------------------------------------------------------- Init State ----------------------------------------------------------
   void initState() {
     super.initState();
     _service.addListener(_onServiceUpdate);
@@ -25,6 +28,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   @override
+    //-------------------------------------------------------- Dispose Method ----------------------------------------------------------
   void dispose() {
     _service.removeListener(_onServiceUpdate);
     super.dispose();
@@ -311,6 +315,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   @override
+    //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,

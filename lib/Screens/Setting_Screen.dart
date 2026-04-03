@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import '../Routes/app_Routes.dart';
+import 'package:go_router/go_router.dart';
 import '../services/settings_service.dart';
+import '../Routes/app_routes.dart';
 import '../Widgets/build_header.dart';
 import '../Core/theme/app_colors.dart';
 
+//-------------------------------------------------------- SettingsScreen Class ----------------------------------------------------------
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -11,10 +13,12 @@ class SettingsScreen extends StatefulWidget {
   _SettingsScreenState createState() => _SettingsScreenState();
 }
 
+//-------------------------------------------------------- _SettingsScreenState Class ----------------------------------------------------------
 class _SettingsScreenState extends State<SettingsScreen> {
   final SettingsService _service = SettingsService();
 
   @override
+    //-------------------------------------------------------- Init State ----------------------------------------------------------
   void initState() {
     super.initState();
     _service.init();
@@ -22,6 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   @override
+    //-------------------------------------------------------- Dispose Method ----------------------------------------------------------
   void dispose() {
     _service.removeListener(_onServiceUpdate);
     super.dispose();
@@ -32,6 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   @override
+    //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -132,10 +138,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: _showIpDialog,
               ),
               _buildSettingItem(
+                icon: Icons.memory_rounded,
+                title: 'ESP32 Configuration',
+                subtitle: 'Manage IP and Wi-Fi',
+                onTap: () => context.push('/esp32Config'),
+              ),
+              const Divider(color: AppColors.settingsDivider),
+              _buildSettingItem(
                 icon: Icons.wifi_find,
                 title: "Auto Discovery",
                 subtitle: "Find ESP32 on local network",
-                onTap: () => Navigator.pushNamed(context, '/esp32Config'),
+                onTap: () => context.push('/esp32Config'),
                 iconColor: Colors.orange[800]!,
                 showDivider: false,
               ),
@@ -345,16 +358,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: const Text("Are you sure you want to sign out?"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.settingsLogoutIcon,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
+          TextButton(
             onPressed: () async {
+              Navigator.pop(context);
               await _service.logout();
-              Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (route) => false);
+              if (!mounted) return;
+              context.go(AppRoutes.login);
             },
-            child: const Text("LOGOUT", style: TextStyle(color: AppColors.white)),
+            child: const Text("LOGOUT", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
           ),
         ],
       ),

@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import '../services/esp32_service.dart';
 import '../Core/theme/app_colors.dart';
 
+//-------------------------------------------------------- Esp32ConfigScreen Class ----------------------------------------------------------
 class Esp32ConfigScreen extends StatefulWidget {
   @override
   State<Esp32ConfigScreen> createState() => _Esp32ConfigScreenState();
 }
 
+//-------------------------------------------------------- _Esp32ConfigScreenState Class ----------------------------------------------------------
 class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
   final Esp32Service _esp32Service = Esp32Service();
   String status = "Checking...";
@@ -16,6 +18,7 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
   String? discoveredIp;
 
   @override
+    //-------------------------------------------------------- Init State ----------------------------------------------------------
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -69,6 +72,7 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
   }
 
   @override
+    //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,

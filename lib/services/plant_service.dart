@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data_manager.dart';
 
+//-------------------------------------------------------- PlantService Class ----------------------------------------------------------
 class PlantService extends ChangeNotifier {
   static final PlantService _instance = PlantService._internal();
   factory PlantService() => _instance;
@@ -28,6 +29,7 @@ class PlantService extends ChangeNotifier {
   }
 
   @override
+    //-------------------------------------------------------- Dispose Method ----------------------------------------------------------
   void dispose() {
     _isDisposed = true;
     _syncTimer?.cancel();
@@ -104,6 +106,21 @@ class PlantService extends ChangeNotifier {
               }
           }
         }
+        
+        // Fetch latest system status to sync motor states
+        try {
+          final statusRes = await http.get(Uri.parse("$baseUrl/api/system/status"))
+              .timeout(const Duration(seconds: 2));
+          if (statusRes.statusCode == 200) {
+            final Map<String, dynamic> statusData = jsonDecode(statusRes.body);
+            if (statusData.containsKey('activeMotorsList')) {
+              List<dynamic> activeList = statusData['activeMotorsList'];
+              for (var plant in _dataManager.plants) {
+                plant.isMotorOn = activeList.contains(plant.id) || activeList.contains(plant.id.toString());
+              }
+            }
+          }
+        } catch (_) {}
         
         lastUpdated = DateTime.now();
         isSyncing = false;

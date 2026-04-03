@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+//-------------------------------------------------------- WateringSchedule Class ----------------------------------------------------------
 class WateringSchedule {
   final String id;
   final String time; // HH:mm format
@@ -68,6 +69,7 @@ class WateringSchedule {
   }
 }
 
+//-------------------------------------------------------- ScheduleService Class ----------------------------------------------------------
 class ScheduleService extends ChangeNotifier {
   static final ScheduleService _instance = ScheduleService._internal();
   factory ScheduleService() => _instance;
@@ -290,6 +292,7 @@ class ScheduleService extends ChangeNotifier {
   }
 
   @override
+    //-------------------------------------------------------- Dispose Method ----------------------------------------------------------
   void dispose() {
     _localCheckTimer?.cancel();
     _subscription?.cancel();

@@ -13,6 +13,7 @@ import 'esp32_service.dart';
 import 'plant_service.dart';
 import 'weather_service.dart';
 
+//-------------------------------------------------------- DashboardStrings Class ----------------------------------------------------------
 class DashboardStrings {
   static const disconnected = "DISCONNECTED";
   static const systemOnline = "SYSTEM ONLINE";
@@ -20,7 +21,8 @@ class DashboardStrings {
   static const loading = "CHECKING...";
 }
 
-class DashboardService extends ChangeNotifier {
+//-------------------------------------------------------- DashboardService Class ----------------------------------------------------------
+class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
   static final DashboardService _instance = DashboardService._internal();
   factory DashboardService() => _instance;
   DashboardService._internal();
@@ -69,25 +71,36 @@ class DashboardService extends ChangeNotifier {
   VoidCallback? onIrrigationComplete;
 
   Future<void> init() async {
+    _isDisposed = false;
+    WidgetsBinding.instance.addObserver(this);
+    if (_isInitialized) return;
+
     try {
       _prefs = await SharedPreferences.getInstance();
       await loadUserData();
       await checkDeviceConfiguration();
       await fetchWeatherData();
       
-      if (!_isInitialized) {
-        _setupConnectivityListener();
-        _startPeriodicTasks();
-        _isInitialized = true;
-      }
+      _setupConnectivityListener();
+      _startPeriodicTasks();
+      _isInitialized = true;
     } catch (e) {
       debugPrint("DashboardService Init Error: $e");
     }
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      checkEspConnection(); // Trigger status update on app resume/reconnect
+    }
+  }
+
+  @override
+    //-------------------------------------------------------- Dispose Method ----------------------------------------------------------
   void dispose() {
     _isDisposed = true;
+    WidgetsBinding.instance.removeObserver(this);
     _moistureTimer?.cancel();
     _irrigationTimer?.cancel();
     _connectionCheckTimer?.cancel();
@@ -313,9 +326,29 @@ class DashboardService extends ChangeNotifier {
   Future<bool> checkEspConnection() async {
     if (_isDisposed) return false;
     try {
-      bool isConnected = await _esp32Service.checkConnection().timeout(const Duration(seconds: 5));
+      final statusMap = await _esp32Service.getSystemStatus().timeout(const Duration(seconds: 5));
+      bool isConnected = statusMap != null && statusMap['status'] == 'ok';
+
       _updateState(() {
         connectionStatus = isConnected ? DashboardStrings.systemOnline : DashboardStrings.disconnected;
+        if (isConnected && statusMap != null) {
+          mainMotor = statusMap['mainMotor'] == 'on';
+          autoMode = statusMap['autoMode'] == true;
+          
+          _dataManager.mainMotorOn = mainMotor;
+          _dataManager.isSystemAutoMode = autoMode;
+
+          if (statusMap.containsKey('activeMotorsList')) {
+            List<dynamic> activeList = statusMap['activeMotorsList'];
+            for (var plant in _dataManager.plants) {
+              plant.isMotorOn = activeList.contains(plant.id) || activeList.contains(plant.id.toString());
+            }
+          }
+          
+          try {
+            PlantService().notifyListeners(); // Force Plant Control Screen to refresh UI
+          } catch (_) {}
+        }
       });
       return isConnected;
     } catch (e) {

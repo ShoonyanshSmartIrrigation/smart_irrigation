@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter_svg/svg.dart';
-import '../Routes/app_Routes.dart';
-import '../Widgets/build_header.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:go_router/go_router.dart';
 import '../services/auth_service.dart';
+import '../Routes/app_routes.dart';
 import '../Core/theme/app_colors.dart';
+import '../Widgets/build_header.dart';
 
+//-------------------------------------------------------- SignupScreen Class ----------------------------------------------------------
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
 
@@ -14,6 +17,7 @@ class SignupScreen extends StatefulWidget {
   _SignupScreenState createState() => _SignupScreenState();
 }
 
+//-------------------------------------------------------- _SignupScreenState Class ----------------------------------------------------------
 class _SignupScreenState extends State<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
 
@@ -34,12 +38,14 @@ class _SignupScreenState extends State<SignupScreen> {
   Color _strengthColor = Colors.transparent;
 
   @override
+    //-------------------------------------------------------- Init State ----------------------------------------------------------
   void initState() {
     super.initState();
     passwordController.addListener(_checkPasswordStrength);
   }
 
   @override
+    //-------------------------------------------------------- Dispose Method ----------------------------------------------------------
   void dispose() {
     _nameFocus.dispose();
     _phoneFocus.dispose();
@@ -126,7 +132,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
       if (user != null) {
         showToast("Signup Successful!");
-        Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+        context.go(AppRoutes.dashboard);
       } else {
         showToast("Signup Failed. Please check your details.");
       }
@@ -160,7 +166,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
       if (user != null) {
         showToast("Logged in with Google!");
-        Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+        context.go(AppRoutes.dashboard);
       } else {
         showToast("Google Sign-In failed.");
       }
@@ -188,6 +194,7 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   @override
+    //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.signupBackground,
@@ -370,13 +377,10 @@ class _SignupScreenState extends State<SignupScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text("Already have an account?", style: TextStyle(color: AppColors.signupTextDarkGrey)),
+                        const Text("Already have an account? ", style: TextStyle(color: Colors.white70)),
                         TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text(
-                            "Login", 
-                            style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 16)
-                          ),
+                          onPressed: () => context.pop(),
+                          child: const Text('Login', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
