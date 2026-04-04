@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
+import 'package:smartirrigation/Widgets/WeatherWidget.dart';
 import '../services/dashboard_service.dart';
 import '../Widgets/build_header.dart';
 import '../Core/theme/app_colors.dart';
@@ -1217,7 +1218,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.cardBackground,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
@@ -1227,35 +1228,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "WEATHER",
-                style: TextStyle(
-                  color: AppColors.grey,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
-                ),
-              ),
-              SizedBox(height: 4),
-              Text(
-                "Mostly Sunny",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-              Text(
-                "28°C",
-                style: TextStyle(color: AppColors.grey, fontSize: 14),
-              ),
-            ],
-          ),
-          Icon(Icons.wb_sunny_rounded, color: Colors.orange[400], size: 40),
-        ],
-      ),
+      child: const WeatherWidget(),
     );
   }
 }
