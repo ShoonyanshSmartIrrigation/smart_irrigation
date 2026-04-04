@@ -91,7 +91,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         if (setupStep == 0) ...[
                           const Text(
                             "Setup Your Device",
-                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           const Text(
@@ -100,23 +103,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             style: TextStyle(color: AppColors.grey),
                           ),
                           const SizedBox(height: 20),
-                          if (_service.isConfiguringDevice && _service.scannedNetworks.isEmpty)
+                          if (_service.isConfiguringDevice &&
+                              _service.scannedNetworks.isEmpty)
                             const Padding(
                               padding: EdgeInsets.all(20.0),
                               child: Column(
                                 children: [
-                                  CircularProgressIndicator(color: AppColors.primary),
+                                  CircularProgressIndicator(
+                                    color: AppColors.primary,
+                                  ),
                                   SizedBox(height: 12),
-                                  Text("Searching for device...", style: TextStyle(fontSize: 14, color: AppColors.grey)),
+                                  Text(
+                                    "Searching for device...",
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: AppColors.grey,
+                                    ),
+                                  ),
                                 ],
                               ),
                             )
-                          else if (_service.configurationError != null && _service.scannedNetworks.isEmpty)
+                          else if (_service.configurationError != null &&
+                              _service.scannedNetworks.isEmpty)
                             Column(
                               children: [
-                                const Icon(Icons.error_outline, color: Colors.red, size: 40),
+                                const Icon(
+                                  Icons.error_outline,
+                                  color: Colors.red,
+                                  size: 40,
+                                ),
                                 const SizedBox(height: 10),
-                                Text(_service.configurationError!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+                                Text(
+                                  _service.configurationError!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Colors.red),
+                                ),
                                 const SizedBox(height: 10),
                                 TextButton.icon(
                                   onPressed: () => _service.startWifiScan(),
@@ -130,11 +151,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    const Text("Devices Found", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                    const Text(
+                                      "Devices Found",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
                                     IconButton(
-                                      icon: const Icon(Icons.refresh, color: AppColors.primary),
+                                      icon: const Icon(
+                                        Icons.refresh,
+                                        color: AppColors.primary,
+                                      ),
                                       onPressed: () => _service.startWifiScan(),
                                     ),
                                   ],
@@ -144,56 +175,129 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   child: ListView.builder(
                                     itemCount: _service.scannedNetworks.length,
                                     itemBuilder: (context, index) {
-                                      final network = _service.scannedNetworks[index];
+                                      final network =
+                                          _service.scannedNetworks[index];
                                       final ssid = network.ssid;
-                                      final isEsp = ssid.toUpperCase().contains("ESP32");
-                                      
+                                      final isEsp = ssid.toUpperCase().contains(
+                                        "ESP32",
+                                      );
+
                                       return Card(
                                         elevation: 0,
-                                        color: isEsp ? AppColors.primary.withOpacity(0.05) : Colors.grey[50],
+                                        color: isEsp
+                                            ? AppColors.primary.withOpacity(
+                                                0.05,
+                                              )
+                                            : Colors.grey[50],
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                          side: BorderSide(color: isEsp ? AppColors.primary.withOpacity(0.3) : Colors.transparent),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          side: BorderSide(
+                                            color: isEsp
+                                                ? AppColors.primary.withOpacity(
+                                                    0.3,
+                                                  )
+                                                : Colors.transparent,
+                                          ),
                                         ),
                                         child: ListTile(
-                                          leading: Icon(Icons.wifi, color: isEsp ? AppColors.primary : Colors.grey),
-                                          title: Text(ssid.isEmpty ? "[Hidden]" : ssid, style: TextStyle(fontWeight: isEsp ? FontWeight.bold : FontWeight.normal)),
-                                          subtitle: isEsp ? const Text("Tap to configure", style: TextStyle(color: AppColors.primary, fontSize: 11)) : null,
-                                          trailing: const Icon(Icons.chevron_right, size: 20),
+                                          leading: Icon(
+                                            Icons.wifi,
+                                            color: isEsp
+                                                ? AppColors.primary
+                                                : Colors.grey,
+                                          ),
+                                          title: Text(
+                                            ssid.isEmpty ? "[Hidden]" : ssid,
+                                            style: TextStyle(
+                                              fontWeight: isEsp
+                                                  ? FontWeight.bold
+                                                  : FontWeight.normal,
+                                            ),
+                                          ),
+                                          subtitle: isEsp
+                                              ? const Text(
+                                                  "Tap to configure",
+                                                  style: TextStyle(
+                                                    color: AppColors.primary,
+                                                    fontSize: 11,
+                                                  ),
+                                                )
+                                              : null,
+                                          trailing: const Icon(
+                                            Icons.chevron_right,
+                                            size: 20,
+                                          ),
                                           onTap: () async {
-                                            final hotspotPwdController = TextEditingController(text: "12345678");
-                                            final bool? shouldConnect = await showDialog<bool>(
+                                            final hotspotPwdController =
+                                                TextEditingController(
+                                                  text: "12345678",
+                                                );
+                                            final bool?
+                                            shouldConnect = await showDialog<bool>(
                                               context: context,
                                               builder: (context) => AlertDialog(
                                                 title: Text("Connect to $ssid"),
                                                 content: Column(
-                                                  mainAxisSize: MainAxisSize.min,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
                                                   children: [
-                                                    const Text("Enter the password for the device's hotspot:"),
+                                                    const Text(
+                                                      "Enter the password for the device's hotspot:",
+                                                    ),
                                                     const SizedBox(height: 15),
                                                     TextField(
-                                                      controller: hotspotPwdController,
+                                                      controller:
+                                                          hotspotPwdController,
                                                       decoration: InputDecoration(
-                                                        labelText: "Hotspot Password",
-                                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                                        labelText:
+                                                            "Hotspot Password",
+                                                        border: OutlineInputBorder(
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                10,
+                                                              ),
+                                                        ),
                                                       ),
                                                       obscureText: true,
                                                     ),
                                                   ],
                                                 ),
                                                 actions: [
-                                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("CANCEL")),
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(
+                                                          context,
+                                                          false,
+                                                        ),
+                                                    child: const Text("CANCEL"),
+                                                  ),
                                                   ElevatedButton(
-                                                    onPressed: () => Navigator.pop(context, true),
-                                                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-                                                    child: const Text("CONNECT"),
+                                                    onPressed: () =>
+                                                        Navigator.pop(
+                                                          context,
+                                                          true,
+                                                        ),
+                                                    style:
+                                                        ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              AppColors.primary,
+                                                        ),
+                                                    child: const Text(
+                                                      "CONNECT",
+                                                    ),
                                                   ),
                                                 ],
                                               ),
                                             );
 
                                             if (shouldConnect == true) {
-                                              bool connected = await _service.connectToEspHotspot(ssid, hotspotPwdController.text);
+                                              bool connected = await _service
+                                                  .connectToEspHotspot(
+                                                    ssid,
+                                                    hotspotPwdController.text,
+                                                  );
                                               if (connected) {
                                                 setModalState(() {
                                                   setupStep = 1;
@@ -217,7 +321,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 Navigator.pop(context);
                               },
                               style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
                               ),
                               child: const Text(
                                 "Skip for now",
@@ -232,7 +338,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ] else if (setupStep == 1) ...[
                           const Text(
                             "WiFi Configuration",
-                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           const Text(
@@ -248,7 +357,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               prefixIcon: const Icon(Icons.wifi),
                               filled: true,
                               fillColor: Colors.grey[50],
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(15),
+                                borderSide: BorderSide.none,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 15),
@@ -259,55 +371,93 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               labelText: "Home WiFi Password",
                               prefixIcon: const Icon(Icons.lock_outline),
                               suffixIcon: IconButton(
-                                icon: Icon(obscurePassword ? Icons.visibility_off : Icons.visibility),
-                                onPressed: () => setModalState(() => obscurePassword = !obscurePassword),
+                                icon: Icon(
+                                  obscurePassword
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                ),
+                                onPressed: () => setModalState(
+                                  () => obscurePassword = !obscurePassword,
+                                ),
                               ),
                               filled: true,
                               fillColor: Colors.grey[50],
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(15),
+                                borderSide: BorderSide.none,
+                              ),
                             ),
                           ),
                           if (_service.configurationError != null)
                             Padding(
                               padding: const EdgeInsets.only(top: 15),
-                              child: Text(_service.configurationError!, style: const TextStyle(color: Colors.red, fontSize: 12), textAlign: TextAlign.center),
+                              child: Text(
+                                _service.configurationError!,
+                                style: const TextStyle(
+                                  color: Colors.red,
+                                  fontSize: 12,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
                             ),
                           const SizedBox(height: 25),
                           SizedBox(
                             width: double.infinity,
                             height: 55,
                             child: ElevatedButton(
-                              onPressed: _service.isConfiguringDevice 
-                                ? null 
-                                : () async {
-                                    bool success = await _service.sendWifiCredentials(
-                                      ssidController.text.trim(),
-                                      passwordController.text.trim(),
-                                    );
-                                    if (success) {
-                                      setModalState(() => setupStep = 2);
-                                    }
-                                  },
+                              onPressed: _service.isConfiguringDevice
+                                  ? null
+                                  : () async {
+                                      bool success = await _service
+                                          .sendWifiCredentials(
+                                            ssidController.text.trim(),
+                                            passwordController.text.trim(),
+                                          );
+                                      if (success) {
+                                        setModalState(() => setupStep = 2);
+                                      }
+                                    },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
                                 elevation: 0,
                               ),
-                              child: _service.isConfiguringDevice 
-                                ? const CircularProgressIndicator(color: Colors.white)
-                                : const Text("SEND TO DEVICE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                              child: _service.isConfiguringDevice
+                                  ? const CircularProgressIndicator(
+                                      color: Colors.white,
+                                    )
+                                  : const Text(
+                                      "SEND TO DEVICE",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
                             ),
                           ),
                           TextButton(
                             onPressed: () => setModalState(() => setupStep = 0),
-                            child: const Text("Back", style: TextStyle(color: AppColors.grey)),
+                            child: const Text(
+                              "Back",
+                              style: TextStyle(color: AppColors.grey),
+                            ),
                           ),
                         ] else if (setupStep == 2) ...[
-                          const Icon(Icons.check_circle_rounded, color: Colors.green, size: 80),
+                          const Icon(
+                            Icons.check_circle_rounded,
+                            color: Colors.green,
+                            size: 80,
+                          ),
                           const SizedBox(height: 20),
                           const Text(
                             "Setup Complete!",
-                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(height: 10),
                           const Text(
@@ -326,10 +476,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
                                 elevation: 0,
                               ),
-                              child: const Text("FINISH", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                              child: const Text(
+                                "FINISH",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -347,7 +506,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _showTimerPicker() {
     int tempMinutes = _service.selectedMinutes;
-    final FixedExtentScrollController scrollController = FixedExtentScrollController(initialItem: tempMinutes - 1);
+    final FixedExtentScrollController scrollController =
+        FixedExtentScrollController(initialItem: tempMinutes - 1);
 
     showModalBottomSheet(
       context: context,
@@ -360,15 +520,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
               height: MediaQuery.of(context).size.height * 0.6,
               decoration: const BoxDecoration(
                 color: AppColors.white,
-                borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(40),
+                  topRight: Radius.circular(40),
+                ),
               ),
               child: Column(
                 children: [
                   const SizedBox(height: 20),
-                  Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))),
+                  Container(
+                    width: 50,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
                   const SizedBox(height: 30),
-                  const Text("Select Duration", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87)),
-                  const Text("How long should irrigation run?", style: TextStyle(fontSize: 14, color: AppColors.grey)),
+                  const Text(
+                    "Select Duration",
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const Text(
+                    "How long should irrigation run?",
+                    style: TextStyle(fontSize: 14, color: AppColors.grey),
+                  ),
                   const SizedBox(height: 40),
                   Expanded(
                     child: Stack(
@@ -380,7 +560,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           decoration: BoxDecoration(
                             color: AppColors.primary.withOpacity(0.05),
                             borderRadius: BorderRadius.circular(15),
-                            border: Border.all(color: AppColors.primary.withOpacity(0.1), width: 1),
+                            border: Border.all(
+                              color: AppColors.primary.withOpacity(0.1),
+                              width: 1,
+                            ),
                           ),
                         ),
                         ListWheelScrollView.useDelegate(
@@ -408,8 +591,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   "${index + 1} minutes",
                                   style: TextStyle(
                                     fontSize: isSelected ? 26 : 20,
-                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                    color: isSelected ? AppColors.primary : AppColors.grey.withOpacity(0.4),
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.w500,
+                                    color: isSelected
+                                        ? AppColors.primary
+                                        : AppColors.grey.withOpacity(0.4),
                                   ),
                                 ),
                               );
@@ -434,11 +621,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           backgroundColor: AppColors.primary,
                           foregroundColor: AppColors.white,
                           elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                         ),
                         child: const Text(
                           "CONFIRM DURATION",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
                         ),
                       ),
                     ),
@@ -465,13 +658,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) {
       FlutterRingtonePlayer().playNotification();
     }
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text("Irrigation Complete"),
-        content: const Text("The irrigation timer has finished and the motor has been turned off."),
+        content: const Text(
+          "The irrigation timer has finished and the motor has been turned off.",
+        ),
         actions: [
           TextButton(
             onPressed: () {
@@ -583,7 +778,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       decoration: BoxDecoration(
         color: AppColors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.white.withValues(alpha: 0.1), width: 1),
+        border: Border.all(
+          color: AppColors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -596,10 +794,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: (online ? Colors.greenAccent : Colors.redAccent).withValues(alpha: 0.5),
+                  color: (online ? Colors.greenAccent : Colors.redAccent)
+                      .withValues(alpha: 0.5),
                   blurRadius: 4,
                   spreadRadius: 1,
-                )
+                ),
               ],
             ),
           ),
@@ -648,13 +847,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildInfoCard(String title, String value, IconData icon, Color bgColor, Color iconColor, {bool showProgress = false, double progressValue = 0, String? subTitle, VoidCallback? onTap}) {
+  Widget _buildInfoCard(
+    String title,
+    String value,
+    IconData icon,
+    Color bgColor,
+    Color iconColor, {
+    bool showProgress = false,
+    double progressValue = 0,
+    String? subTitle,
+    VoidCallback? onTap,
+  }) {
     Widget card = Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 15, offset: const Offset(0, 8))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -664,10 +879,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  shape: BoxShape.circle,
+                ),
                 child: Icon(icon, color: iconColor, size: 22),
               ),
-              Text(title, style: const TextStyle(color: AppColors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: AppColors.grey,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -675,15 +901,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(value.split('/').first, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.black87)),
+              Text(
+                value.split('/').first,
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
               if (value.contains('/')) ...[
-                Text("/${value.split('/').last}", style: const TextStyle(fontSize: 18, color: AppColors.grey, fontWeight: FontWeight.w500)),
+                Text(
+                  "/${value.split('/').last}",
+                  style: const TextStyle(
+                    fontSize: 18,
+                    color: AppColors.grey,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ] else if (value.contains('%')) ...[
-                 const Text("%", style: TextStyle(fontSize: 18, color: Colors.blueAccent, fontWeight: FontWeight.bold)),
-              ]
+                const Text(
+                  "%",
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.blueAccent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ],
           ),
-          if (subTitle != null) Text(subTitle, style: const TextStyle(color: AppColors.grey, fontSize: 12)),
+          if (subTitle != null)
+            Text(
+              subTitle,
+              style: const TextStyle(color: AppColors.grey, fontSize: 12),
+            ),
           if (showProgress) ...[
             const SizedBox(height: 12),
             ClipRRect(
@@ -694,8 +945,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 color: Colors.blueAccent,
                 minHeight: 6,
               ),
-            )
-          ]
+            ),
+          ],
         ],
       ),
     );
@@ -709,35 +960,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
         color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: (_service.mainPumpError || _service.autoModeError) ? Colors.redAccent : Colors.transparent,
+          color: (_service.mainPumpError || _service.autoModeError)
+              ? Colors.redAccent
+              : Colors.transparent,
           width: 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: (_service.mainPumpError || _service.autoModeError) ? Colors.red.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.04), 
-            blurRadius: 10, 
-            offset: const Offset(0, 4)
-          )
+            color: (_service.mainPumpError || _service.autoModeError)
+                ? Colors.red.withValues(alpha: 0.1)
+                : Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
         children: [
           _buildToggleRow(
             "On All Motor",
-            _service.mainMotor, 
-            _service.mainPumpError ? Icons.wifi_off_rounded : Icons.power_settings_new_rounded, 
+            _service.mainMotor,
+            _service.mainPumpError
+                ? Icons.wifi_off_rounded
+                : Icons.power_settings_new_rounded,
             (val) => _service.toggleMainPump(val),
-            _service.mainPumpError ? Colors.red.withValues(alpha: 0.1) : Colors.green.withValues(alpha: 0.1),
+            _service.mainPumpError
+                ? Colors.red.withValues(alpha: 0.1)
+                : Colors.green.withValues(alpha: 0.1),
             _service.mainPumpError ? Colors.red : Colors.green,
             isError: _service.mainPumpError,
           ),
-          const Padding(padding: EdgeInsets.symmetric(horizontal: 20), child: Divider(height: 1, color: AppColors.dashboardDivider)),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: Divider(height: 1, color: AppColors.dashboardDivider),
+          ),
           _buildToggleRow(
-            "Automatic Mode", 
-            _service.autoMode, 
-            _service.autoModeError ? Icons.wifi_off_rounded : Icons.auto_awesome_rounded, 
+            "Automatic Mode",
+            _service.autoMode,
+            _service.autoModeError
+                ? Icons.wifi_off_rounded
+                : Icons.auto_awesome_rounded,
             (val) => _service.toggleAllMotors(val),
-            _service.autoModeError ? Colors.red.withValues(alpha: 0.1) : Colors.blue.withValues(alpha: 0.1),
+            _service.autoModeError
+                ? Colors.red.withValues(alpha: 0.1)
+                : Colors.blue.withValues(alpha: 0.1),
             _service.autoModeError ? Colors.red : Colors.blue,
             isError: _service.autoModeError,
           ),
@@ -746,22 +1012,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildToggleRow(String title, bool value, IconData icon, Function(bool) onChanged, Color iconBg, Color iconColor, {bool isError = false}) {
+  Widget _buildToggleRow(
+    String title,
+    bool value,
+    IconData icon,
+    Function(bool) onChanged,
+    Color iconBg,
+    Color iconColor, {
+    bool isError = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: ListTile(
         leading: Container(
           padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(
+            color: iconBg,
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Icon(icon, color: iconColor, size: 24),
         ),
         title: Text(
-          isError ? "$title (OFFLINE)" : title, 
+          isError ? "$title (OFFLINE)" : title,
           style: TextStyle(
-            fontWeight: FontWeight.bold, 
+            fontWeight: FontWeight.bold,
             fontSize: 16,
             color: isError ? Colors.red : Colors.black87,
-          )
+          ),
         ),
         trailing: Switch(
           value: value,
@@ -779,7 +1056,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: AppColors.dashboardTimerCardBg, borderRadius: BorderRadius.circular(30)),
+      decoration: BoxDecoration(
+        color: AppColors.dashboardTimerCardBg,
+        borderRadius: BorderRadius.circular(30),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -799,17 +1079,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("NEXT CYCLE", style: TextStyle(color: AppColors.grey, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            const Text(
+              "NEXT CYCLE",
+              style: TextStyle(
+                color: AppColors.grey,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+              ),
+            ),
             Row(
               children: [
-                const Text("Irrigation Timer", style: TextStyle(color: AppColors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text(
+                  "Irrigation Timer",
+                  style: TextStyle(
+                    color: AppColors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 Visibility(
                   visible: !isRunning,
                   maintainSize: true,
                   maintainAnimation: true,
                   maintainState: true,
                   child: IconButton(
-                    icon: const Icon(Icons.edit_calendar_rounded, color: Colors.green, size: 20),
+                    icon: const Icon(
+                      Icons.edit_calendar_rounded,
+                      color: Colors.green,
+                      size: 20,
+                    ),
                     onPressed: _showTimerPicker,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -819,7 +1118,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ),
-        Icon(Icons.timer_outlined, color: AppColors.white.withValues(alpha: 0.2), size: 32),
+        Icon(
+          Icons.timer_outlined,
+          color: AppColors.white.withValues(alpha: 0.2),
+          size: 32,
+        ),
       ],
     );
   }
@@ -833,9 +1136,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: [
-            Text(_service.getTimerText(), style: const TextStyle(color: AppColors.white, fontSize: 50, fontWeight: FontWeight.bold, letterSpacing: 2)),
+            Text(
+              _service.getTimerText(),
+              style: const TextStyle(
+                color: AppColors.white,
+                fontSize: 50,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2,
+              ),
+            ),
             const SizedBox(width: 8),
-            const Text("min", style: TextStyle(color: AppColors.grey, fontSize: 24, fontWeight: FontWeight.w500)),
+            const Text(
+              "min",
+              style: TextStyle(
+                color: AppColors.grey,
+                fontSize: 24,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
       ),
@@ -846,7 +1164,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Row(
       children: [
         Expanded(
-          child: _timerButton(isRunning ? "RUNNING" : "START", isRunning ? AppColors.primary.withValues(alpha: 0.5) : AppColors.primary, isRunning ? () {} : () => _service.toggleAllMotors(true)),
+          child: _timerButton(
+            isRunning ? "RUNNING" : "START",
+            isRunning
+                ? AppColors.primary.withValues(alpha: 0.5)
+                : AppColors.primary,
+            isRunning ? () {} : () => _service.toggleAllMotors(true),
+          ),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -859,7 +1183,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _timerButton(String label, Color color, VoidCallback onTap, {Color textColor = AppColors.white}) {
+  Widget _timerButton(
+    String label,
+    Color color,
+    VoidCallback onTap, {
+    Color textColor = AppColors.white,
+  }) {
     return SizedBox(
       height: 55,
       child: ElevatedButton(
@@ -868,9 +1197,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           backgroundColor: color,
           foregroundColor: textColor,
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(30),
+          ),
         ),
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1)),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            letterSpacing: 1,
+          ),
+        ),
       ),
     );
   }
@@ -881,7 +1219,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -889,10 +1233,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("WEATHER", style: TextStyle(color: AppColors.grey, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              Text(
+                "WEATHER",
+                style: TextStyle(
+                  color: AppColors.grey,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
+              ),
               SizedBox(height: 4),
-              Text("Mostly Sunny", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              Text("28°C", style: TextStyle(color: AppColors.grey, fontSize: 14)),
+              Text(
+                "Mostly Sunny",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              Text(
+                "28°C",
+                style: TextStyle(color: AppColors.grey, fontSize: 14),
+              ),
             ],
           ),
           Icon(Icons.wb_sunny_rounded, color: Colors.orange[400], size: 40),
