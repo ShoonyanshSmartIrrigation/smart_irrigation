@@ -64,8 +64,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           builder: (context, child) {
             return StatefulBuilder(
               builder: (context, setModalState) {
-                return WillPopScope(
-                  onWillPop: () async => true,
+                return PopScope(
+                  canPop: true,
                   child: Container(
                     padding: EdgeInsets.only(
                       top: 20,
