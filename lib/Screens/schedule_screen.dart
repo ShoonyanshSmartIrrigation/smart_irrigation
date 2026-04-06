@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/schedule_service.dart';
+import '../services/notification_service.dart';
 import '../Widgets/build_header.dart';
 import '../Core/theme/app_colors.dart';
 
@@ -444,6 +445,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           try {
                             await _service.toggleSchedule(schedule.id, val);
                             _showSuccess(val ? "Schedule enabled & synced" : "Schedule disabled");
+                            NotificationService().showLocalNotification(
+                              title: "Schedule ${val ? 'Enabled' : 'Disabled'}",
+                              body: "${schedule.title} has been ${val ? 'turned on' : 'turned off'}.",
+                            );
                           } catch (e) {
                             _showError("Failed to toggle schedule. Check ESP32.");
                           }

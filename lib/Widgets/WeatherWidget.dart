@@ -60,22 +60,22 @@ class _WeatherWidgetState extends State<WeatherWidget> {
               Text(
                 weather!.city,
                 style: const TextStyle(
-                  fontSize: 19,
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               Text(
-                weather!.description,
+                "Sky: ${weather!.description}",
                 style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               Text(
                 "Humidity: ${weather!.humidity}%",
                 style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -85,17 +85,13 @@ class _WeatherWidgetState extends State<WeatherWidget> {
               Text(
                 "${weather!.temperature.toStringAsFixed(1)}°C",
                 style: const TextStyle(
-                  fontSize: 24,
+                  fontSize: 22,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               (weather!.temperature > 30)
                   ? Icon(Icons.sunny, size: 32, color: Colors.orange[400])
-                  : Icon(
-                      Icons.cloudy_snowing,
-                      size: 32,
-                      color: Colors.blue[400],
-                    ),
+                  : Icon(Icons.wb_cloudy, size: 32, color: Colors.blue[400]),
             ],
           ),
         ],

@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'services/notification_service.dart';
 
 class Plant {
   final int id;
@@ -73,6 +74,10 @@ class DataManager {
       
       if (response.statusCode == 200) {
         mainMotorOn = isOn;
+        NotificationService().showLocalNotification(
+          title: "Main Motor Update",
+          body: "The main motor has been turned ${isOn ? 'ON' : 'OFF'}.",
+        );
         return true;
       }
     } catch (e) {
@@ -96,6 +101,10 @@ class DataManager {
       
       if (response.statusCode == 200) {
         updateAllMotorsLocally(isOn);
+        NotificationService().showLocalNotification(
+          title: "All Motors Update",
+          body: "All motors have been turned ${isOn ? 'ON' : 'OFF'}.",
+        );
         return true;
       }
     } catch (e) {
@@ -128,6 +137,10 @@ class DataManager {
         int index = plants.indexWhere((p) => p.id == id);
         if (index != -1) {
           plants[index].isMotorOn = isOn;
+          NotificationService().showLocalNotification(
+            title: "Plant ${plants[index].id} Update",
+            body: "${plants[index].name} motor has been turned ${isOn ? 'ON' : 'OFF'}.",
+          );
         }
         return true;
       }

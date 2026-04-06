@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:smartirrigation/Widgets/WeatherWidget.dart';
 import '../services/dashboard_service.dart';
+import '../services/notification_service.dart';
 import '../Widgets/build_header.dart';
 import '../Core/theme/app_colors.dart';
 
@@ -984,7 +985,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _service.mainPumpError
                 ? Icons.wifi_off_rounded
                 : Icons.power_settings_new_rounded,
-            (val) => _service.toggleMainPump(val),
+            (val) {
+              _service.toggleMainPump(val);
+              NotificationService().showLocalNotification(
+                title: "Main Motor",
+                body: "Main motor has been ${val ? 'turned on' : 'turned off'}.",
+              );
+            },
             _service.mainPumpError
                 ? Colors.red.withValues(alpha: 0.1)
                 : Colors.green.withValues(alpha: 0.1),
@@ -1001,7 +1008,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _service.autoModeError
                 ? Icons.wifi_off_rounded
                 : Icons.auto_awesome_rounded,
-            (val) => _service.toggleAllMotors(val),
+            (val) {
+              _service.toggleAllMotors(val);
+              NotificationService().showLocalNotification(
+                title: "Automatic Mode",
+                body: "Automatic mode has been ${val ? 'enabled' : 'disabled'}.",
+              );
+            },
             _service.autoModeError
                 ? Colors.red.withValues(alpha: 0.1)
                 : Colors.blue.withValues(alpha: 0.1),
@@ -1170,7 +1183,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             isRunning
                 ? AppColors.primary.withValues(alpha: 0.5)
                 : AppColors.primary,
-            isRunning ? () {} : () => _service.toggleAllMotors(true),
+            isRunning
+                ? () {}
+                : () {
+                    _service.toggleAllMotors(true);
+                    NotificationService().showLocalNotification(
+                      title: "Timer Started",
+                      body: "Watering timer has started.",
+                    );
+                  },
           ),
         ),
         const SizedBox(width: 12),
@@ -1178,6 +1199,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: _timerButton("STOP", AppColors.dashboardStopButtonBg, () {
             _service.toggleAllMotors(false);
             FlutterRingtonePlayer().stop();
+            NotificationService().showLocalNotification(
+              title: "Timer Stopped",
+              body: "Watering timer has been stopped.",
+            );
           }, textColor: Colors.redAccent),
         ),
       ],
