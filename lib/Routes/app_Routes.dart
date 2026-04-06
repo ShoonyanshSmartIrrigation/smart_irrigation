@@ -22,20 +22,41 @@ class AppRoutes {
 
   static final GoRouter router = GoRouter(
     initialLocation: splash,
+    redirect: (context, state) {
+      final isLoggedIn = true; // replace with your auth check
+
+      final isAuthRoute = state.matchedLocation == login ||
+          state.matchedLocation == signup ||
+          state.matchedLocation == splash;
+
+      if (!isLoggedIn && !isAuthRoute) {
+        return login;
+      }
+
+      if (isLoggedIn && isAuthRoute) {
+        return dashboard;
+      }
+
+      return null;
+    },
     routes: [
       GoRoute(
+        name: 'splash',
         path: splash,
         builder: (context, state) => const SplashScreen(),
       ),
       GoRoute(
+        name: 'login',
         path: login,
         builder: (context, state) => const LoginScreen(),
       ),
       GoRoute(
+        name: 'signup',
         path: signup,
         builder: (context, state) => const SignupScreen(),
       ),
       GoRoute(
+        name: 'esp32Config',
         path: esp32Config,
         builder: (context, state) => Esp32ConfigScreen(),
       ),
@@ -47,12 +68,13 @@ class AppRoutes {
           StatefulShellBranch(
             routes: [
               GoRoute(
+                name: 'dashboard',
                 path: dashboard,
                 builder: (context, state) => DashboardScreen(
                   onTabRequested: (index) {
-                    if (index == 1) context.go(zones);
-                    if (index == 2) context.go(schedule);
-                    if (index == 3) context.go(settings);
+                    if (index == 1) context.go(AppRoutes.zones);
+                    if (index == 2) context.go(AppRoutes.schedule);
+                    if (index == 3) context.go(AppRoutes.settings);
                   },
                 ),
               ),
@@ -61,6 +83,7 @@ class AppRoutes {
           StatefulShellBranch(
             routes: [
               GoRoute(
+                name: 'zones',
                 path: zones,
                 builder: (context, state) => const PlantControlScreen(),
               ),
@@ -69,6 +92,7 @@ class AppRoutes {
           StatefulShellBranch(
             routes: [
               GoRoute(
+                name: 'schedule',
                 path: schedule,
                 builder: (context, state) => const ScheduleScreen(),
               ),
@@ -77,6 +101,7 @@ class AppRoutes {
           StatefulShellBranch(
             routes: [
               GoRoute(
+                name: 'settings',
                 path: settings,
                 builder: (context, state) => const SettingsScreen(),
               ),
@@ -85,9 +110,16 @@ class AppRoutes {
         ],
       ),
     ],
-    errorBuilder: (context, state) => const Scaffold(
+    errorBuilder: (context, state) => Scaffold(
       body: Center(
-        child: Text("Page not found"),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 60, color: Colors.red),
+            const SizedBox(height: 10),
+            Text("Page not found: ${state.uri}"),
+          ],
+        ),
       ),
     ),
   );
