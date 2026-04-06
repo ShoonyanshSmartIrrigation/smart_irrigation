@@ -185,10 +185,7 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
         results = await WiFiScan.instance.getScannedResults();
       }
 
-      if (results.isEmpty) {
-        final legacy = await WiFiForIoTPlugin.loadWifiList();
-        if (legacy != null) results = legacy;
-      }
+      // Fallback via wifi_scan is already handled above.
 
       // Sort: ESP32 SSIDs first
       results.sort((a, b) {
@@ -327,12 +324,12 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
     if (_isDisposed) return false;
     try {
       final statusMap = await _esp32Service.getSystemStatus().timeout(const Duration(seconds: 5));
-      bool isConnected = statusMap != null && statusMap['status'] == 'ok';
+      bool isConnected = statusMap?['status'] == 'ok';
 
       _updateState(() {
         connectionStatus = isConnected ? DashboardStrings.systemOnline : DashboardStrings.disconnected;
-        if (isConnected && statusMap != null) {
-          mainMotor = statusMap['mainMotor'] == 'on';
+        if (isConnected) {
+          mainMotor = statusMap!['mainMotor'] == 'on';
           autoMode = statusMap['autoMode'] == true;
           
           _dataManager.mainMotorOn = mainMotor;
@@ -419,8 +416,11 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
             debugPrint("Error notifying PlantService: $e");
           }
 
-          if (value) startIrrigationTimer();
-          else stopIrrigationTimer();
+          if (value) {
+            startIrrigationTimer();
+          } else {
+            stopIrrigationTimer();
+          }
         } else {
           _setAutoModeError();
         }
@@ -445,9 +445,16 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
     _updateState(() => timerSeconds = selectedMinutes * 60);
     _irrigationTimer?.cancel();
     _irrigationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_isDisposed) { timer.cancel(); return; }
-      if (timerSeconds > 0) _updateState(() => timerSeconds--);
-      else { timer.cancel(); _finalizeIrrigation(); }
+      if (_isDisposed) { 
+        timer.cancel(); 
+        return; 
+      }
+      if (timerSeconds > 0) {
+        _updateState(() => timerSeconds--);
+      } else { 
+        timer.cancel(); 
+        _finalizeIrrigation(); 
+      }
     });
   }
 

@@ -1,4 +1,4 @@
-import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -60,25 +60,25 @@ class DataManager {
     int port = prefs.getInt("esp_port") ?? 80;
 
     if (ip == null || ip.isEmpty) {
-      print("DataManager: No IP configured for ESP32");
+      debugPrint("DataManager: No IP configured for ESP32");
       return false;
     }
 
     String url = "http://$ip:$port${isOn ? "/api/mainmotor/on" : "/api/mainmotor/off"}";
-    print("DataManager: Sending Request -> POST $url");
+    debugPrint("DataManager: Sending Request -> POST $url");
 
     try {
       final response = await http.post(Uri.parse(url))
           .timeout(const Duration(seconds: 3));
       
-      print("DataManager: Response Received -> Status: ${response.statusCode}, Body: ${response.body}");
+      debugPrint("DataManager: Response Received -> Status: ${response.statusCode}, Body: ${response.body}");
       
       if (response.statusCode == 200) {
         mainMotorOn = isOn;
         return true;
       }
     } catch (e) {
-      print("DataManager: Error during request -> $e");
+      debugPrint("DataManager: Error during request -> $e");
     }
     return false;
   }
@@ -101,7 +101,7 @@ class DataManager {
         return true;
       }
     } catch (e) {
-      print("DataManager: Master Control Error -> $e");
+      debugPrint("DataManager: Master Control Error -> $e");
     }
     return false;
   }

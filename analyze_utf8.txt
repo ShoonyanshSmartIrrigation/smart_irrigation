@@ -1,0 +1,48 @@
+﻿Analyzing smartirrigation...                                    
+
+   info - The file name 'Login_Screen.dart' isn't a lower_case_with_underscores identifier - lib\Auth\Login_Screen.dart:1:1 - file_names
+   info - The import of 'package:flutter/services.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' - lib\Auth\Login_Screen.dart:5:8 - unnecessary_import
+   info - Invalid use of a private type in a public API - lib\Auth\Login_Screen.dart:18:3 - library_private_types_in_public_api
+   info - The file name 'Signup_Screen.dart' isn't a lower_case_with_underscores identifier - lib\Auth\Signup_Screen.dart:1:1 - file_names
+warning - Unused import: 'package:firebase_database/firebase_database.dart' - lib\Auth\Signup_Screen.dart:3:8 - unused_import
+   info - Invalid use of a private type in a public API - lib\Auth\Signup_Screen.dart:17:3 - library_private_types_in_public_api
+warning - Dead code - lib\Routes\app_routes.dart:32:23 - dead_code
+warning - Dead code - lib\Routes\app_routes.dart:32:40 - dead_code
+   info - The file name 'Dashboard_screen.dart' isn't a lower_case_with_underscores identifier - lib\Screens\Dashboard_screen.dart:1:1 - file_names
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\Screens\Dashboard_screen.dart:157:74 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\Screens\Dashboard_screen.dart:160:93 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\Screens\Dashboard_screen.dart:385:54 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\Screens\Dashboard_screen.dart:387:73 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\Screens\Dashboard_screen.dart:416:92 - deprecated_member_use
+   info - The file name 'Esp32Config_Screen.dart' isn't a lower_case_with_underscores identifier - lib\Screens\Esp32Config_Screen.dart:1:1 - file_names
+   info - Constructors for public widgets should have a named 'key' parameter - lib\Screens\Esp32Config_Screen.dart:7:7 - use_key_in_widget_constructors
+   info - The file name 'MainScreen.dart' isn't a lower_case_with_underscores identifier - lib\Screens\MainScreen.dart:1:1 - file_names
+   info - 'WillPopScope' is deprecated and shouldn't be used. Use PopScope instead. The Android predictive back feature will not work with WillPopScope. This feature was deprecated after v3.12.0-1.0.pre - lib\Screens\MainScreen.dart:30:12 - deprecated_member_use
+   info - The file name 'Plant_Control_Screen.dart' isn't a lower_case_with_underscores identifier - lib\Screens\Plant_Control_Screen.dart:1:1 - file_names
+   info - The file name 'Setting_Screen.dart' isn't a lower_case_with_underscores identifier - lib\Screens\Setting_Screen.dart:1:1 - file_names
+   info - Invalid use of a private type in a public API - lib\Screens\Setting_Screen.dart:13:3 - library_private_types_in_public_api
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\Screens\Setting_Screen.dart:56:67 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\Screens\Setting_Screen.dart:59:52 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\Screens\Setting_Screen.dart:91:48 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\Screens\Setting_Screen.dart:185:60 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\Screens\Setting_Screen.dart:249:32 - deprecated_member_use
+   info - The file name 'SplashScreen.dart' isn't a lower_case_with_underscores identifier - lib\Screens\SplashScreen.dart:1:1 - file_names
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\Screens\schedule_screen.dart:295:53 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\Widgets\custom_bottom_nav.dart:30:33 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\Widgets\custom_bottom_nav.dart:135:43 - deprecated_member_use
+warning - Unused import: 'dart:math' - lib\data_manager.dart:1:8 - unused_import
+   info - Don't invoke 'print' in production code - lib\data_manager.dart:63:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\data_manager.dart:68:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\data_manager.dart:74:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\data_manager.dart:81:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\data_manager.dart:104:7 - avoid_print
+   info - Type could be non-nullable - lib\services\auth_service.dart:185:34 - unnecessary_nullable_for_final_variable_declarations
+   info - Uses 'await' on an instance of 'GoogleSignInAuthentication', which is not a subtype of 'Future' - lib\services\auth_service.dart:188:53 - await_only_futures
+   info - 'loadWifiList' is deprecated and shouldn't be used. This is discontinued, switch to new `wifi_scan` plugin by WiFiFlutter. Check - https://pub.dev/packages/wifi_scan - lib\services\dashboard_service.dart:189:47 - deprecated_member_use
+warning - The operand can't be 'null', so the condition is always 'true' - lib\services\dashboard_service.dart:190:20 - unnecessary_null_comparison
+warning - The operand can't be 'null', so the condition is always 'true' - lib\services\dashboard_service.dart:334:38 - unnecessary_null_comparison
+   info - Statements in an if should be enclosed in a block - lib\services\dashboard_service.dart:422:22 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\services\dashboard_service.dart:423:16 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\services\dashboard_service.dart:449:29 - curly_braces_in_flow_control_structures
+warning - The declaration '_stopEsp32Alarm' isn't referenced - lib\services\schedule_service.dart:283:16 - unused_element
+

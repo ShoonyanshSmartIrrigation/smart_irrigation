@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../Auth/Login_Screen.dart';
 import '../Auth/Signup_Screen.dart';
 import '../Screens/MainScreen.dart';
@@ -9,6 +10,8 @@ import '../Screens/schedule_screen.dart';
 import '../Screens/Setting_Screen.dart';
 import '../Screens/Esp32Config_Screen.dart';
 import '../Screens/SplashScreen.dart';
+import '../Screens/setup_screen.dart';
+import '../services/setup_logic.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -19,22 +22,32 @@ class AppRoutes {
   static const String schedule = '/schedule';
   static const String settings = '/settings';
   static const String esp32Config = '/esp32Config';
+  static const String setup = '/setup';
 
   static final GoRouter router = GoRouter(
     initialLocation: splash,
     redirect: (context, state) {
-      final isLoggedIn = true; // replace with your auth check
+      final user = FirebaseAuth.instance.currentUser;
+      final isLoggedIn = user != null;
 
       final isAuthRoute = state.matchedLocation == login ||
           state.matchedLocation == signup ||
           state.matchedLocation == splash;
+          
+      final isSetupRoute = state.matchedLocation == setup;
 
       if (!isLoggedIn && !isAuthRoute) {
         return login;
       }
 
-      if (isLoggedIn && isAuthRoute) {
-        return dashboard;
+      if (isLoggedIn) {
+        bool freshUser = SetupLogic().isFreshUser();
+        
+        if (freshUser && !isSetupRoute) {
+          return setup;
+        } else if (!freshUser && (isAuthRoute || isSetupRoute)) {
+           return dashboard;
+        }
       }
 
       return null;
@@ -54,6 +67,11 @@ class AppRoutes {
         name: 'signup',
         path: signup,
         builder: (context, state) => const SignupScreen(),
+      ),
+      GoRoute(
+        name: 'setup',
+        path: setup,
+        builder: (context, state) => const SetupScreen(),
       ),
       GoRoute(
         name: 'esp32Config',

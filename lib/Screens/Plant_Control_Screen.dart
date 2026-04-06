@@ -52,12 +52,15 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
         onPressed: () => context.go('/settings'),
         child: const Icon(Icons.settings, color: AppColors.white),
       ),
-      body: Column(
-        children: [
-          _buildStatsHeader(totalMotors, activeMotors),
-          const SizedBox(height: 50),
-          Expanded(
-            child: GridView.builder(
+      body: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          children: [
+            _buildStatsHeader(totalMotors, activeMotors),
+            const SizedBox(height: 50),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               padding: const EdgeInsets.all(15),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
@@ -71,8 +74,8 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                 return _buildPlantCard(plant);
               },
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

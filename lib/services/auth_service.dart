@@ -24,6 +24,15 @@ class AuthService {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   late SharedPreferences _prefs;
 
+  // Setup methods
+  bool isFreshUser(String uid) {
+    return !(_prefs.getBool('setup_completed_$uid') ?? false);
+  }
+
+  Future<void> markSetupCompleted(String uid) async {
+    await _prefs.setBool('setup_completed_$uid', true);
+  }
+
   // 11. Loading State
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -182,11 +191,10 @@ class AuthService {
         serverClientId: googleClientId,
       );
 
-      final GoogleSignInAccount? googleUser = await _googleSignIn.authenticate();
+      final googleUser = await _googleSignIn.authenticate();
       
-      if (googleUser == null) return null;
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      final GoogleSignInClientAuthorization? clientAuth = 
+      final googleAuth = googleUser.authentication;
+      final clientAuth = 
           await googleUser.authorizationClient.authorizationForScopes(['email', 'profile']);
 
       final AuthCredential credential = GoogleAuthProvider.credential(

@@ -319,24 +319,32 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Column(
-        children: [
-          _buildHeaderContent(),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _refreshSchedules,
-              child: _isLoading && _service.schedules.isEmpty
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+      body: RefreshIndicator(
+        onRefresh: _refreshSchedules,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
+              _buildHeaderContent(),
+              _isLoading && _service.schedules.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.only(top: 50.0),
+                      child: Center(
+                        child: CircularProgressIndicator(color: AppColors.primary),
+                      ),
+                    )
                   : _service.schedules.isEmpty
                       ? _buildEmptyState()
                       : ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                           itemCount: _service.schedules.length,
                           itemBuilder: (context, index) => _buildScheduleCard(_service.schedules[index]),
                         ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showScheduleSheet(),
@@ -348,27 +356,24 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Widget _buildEmptyState() {
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.6,
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.calendar_today_outlined, size: 80, color: AppColors.scheduleEmptyIcon),
-              const SizedBox(height: 16),
-              Text("No schedules set", style: TextStyle(color: AppColors.scheduleSubtext, fontSize: 18, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              const Text("Tap 'New Schedule' to get started", style: TextStyle(color: AppColors.grey)),
-              const SizedBox(height: 16),
-              TextButton.icon(
-                onPressed: _refreshSchedules,
-                icon: const Icon(Icons.refresh, color: AppColors.primary),
-                label: const Text("Sync Now", style: TextStyle(color: AppColors.primary)),
-              )
-            ],
-          ),
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.6,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.calendar_today_outlined, size: 80, color: AppColors.scheduleEmptyIcon),
+            const SizedBox(height: 16),
+            Text("No schedules set", style: TextStyle(color: AppColors.scheduleSubtext, fontSize: 18, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            const Text("Tap 'New Schedule' to get started", style: TextStyle(color: AppColors.grey)),
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: _refreshSchedules,
+              icon: const Icon(Icons.refresh, color: AppColors.primary),
+              label: const Text("Sync Now", style: TextStyle(color: AppColors.primary)),
+            )
+          ],
         ),
       ),
     );

@@ -280,7 +280,7 @@ class ScheduleService extends ChangeNotifier {
     }
   }
 
-  Future<void> _stopEsp32Alarm() async {
+  Future<void> stopEsp32Alarm() async {
     final baseUrl = await _getBaseUrl();
     if (baseUrl == null) return;
     try {
