@@ -54,15 +54,15 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
       discoveredIp = null;
     });
 
-    String? ip = await _esp32Service.startAutoDiscovery();
+    Map<String, dynamic>? resultData = await _esp32Service.startAutoDiscovery();
 
     if (mounted) {
       setState(() {
         isLoading = false;
-        if (ip != null) {
+        if (resultData != null) {
           status = "Connected";
           result = "✅ Device is connected!";
-          discoveredIp = ip;
+          discoveredIp = resultData['ip'];
         } else {
           status = "Not Found";
           result = "Could not find ESP32. Please ensure it's powered on and on the same Wi-Fi.";

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -13,6 +14,22 @@ import '../Screens/SplashScreen.dart';
 import '../Screens/setup_screen.dart';
 import '../services/setup_logic.dart';
 
+class GoRouterRefreshStream extends ChangeNotifier {
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    _subscription = stream.asBroadcastStream().listen(
+          (dynamic _) => notifyListeners(),
+        );
+  }
+
+  late final StreamSubscription<dynamic> _subscription;
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}
+
 class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
@@ -26,31 +43,43 @@ class AppRoutes {
 
   static final GoRouter router = GoRouter(
     initialLocation: splash,
+    refreshListenable: GoRouterRefreshStream(FirebaseAuth.instance.authStateChanges()),
     redirect: (context, state) {
-      final user = FirebaseAuth.instance.currentUser;
-      final isLoggedIn = user != null;
+      try {
+        final user = FirebaseAuth.instance.currentUser;
+        final isLoggedIn = user != null;
 
-      final isAuthRoute = state.matchedLocation == login ||
-          state.matchedLocation == signup ||
-          state.matchedLocation == splash;
-          
-      final isSetupRoute = state.matchedLocation == setup;
+        final isAuthRoute = state.matchedLocation == login ||
+            state.matchedLocation == signup ||
+            state.matchedLocation == splash;
+            
+        final isSetupRoute = state.matchedLocation == setup;
 
-      if (!isLoggedIn && !isAuthRoute) {
+        if (!isLoggedIn) {
+          return isAuthRoute ? null : login;
+        }
+
+        // Handle Logged In State
+        bool freshUser = false;
+        try {
+          freshUser = SetupLogic().isFreshUser();
+        } catch (e) {
+          debugPrint("Routing error (freshUser check): $e");
+        }
+        
+        if (freshUser) {
+          return isSetupRoute ? null : setup;
+        } else {
+          // If logged in and NOT a fresh user, avoid Auth/Setup routes
+          if (isAuthRoute || isSetupRoute) {
+             return dashboard;
+          }
+          return null;
+        }
+      } catch (e) {
+        debugPrint("Critical Routing Error: $e");
         return login;
       }
-
-      if (isLoggedIn) {
-        bool freshUser = SetupLogic().isFreshUser();
-        
-        if (freshUser && !isSetupRoute) {
-          return setup;
-        } else if (!freshUser && (isAuthRoute || isSetupRoute)) {
-           return dashboard;
-        }
-      }
-
-      return null;
     },
     routes: [
       GoRoute(
@@ -62,6 +91,10 @@ class AppRoutes {
         name: 'login',
         path: login,
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => LoginScreen(),
       ),
       GoRoute(
         name: 'signup',

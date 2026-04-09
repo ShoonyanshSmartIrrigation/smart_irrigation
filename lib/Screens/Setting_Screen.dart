@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../services/settings_service.dart';
-import '../Routes/app_routes.dart';
 import '../Widgets/build_header.dart';
 import '../Core/theme/app_colors.dart';
 
@@ -360,10 +359,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
           TextButton(
             onPressed: () async {
-              Navigator.pop(context);
+              context.pop();
               await _service.logout();
-              if (!mounted) return;
-              context.go(AppRoutes.login);
+              if (mounted) context.go('/login');
             },
             child: const Text("LOGOUT", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
           ),

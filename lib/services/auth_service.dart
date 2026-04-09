@@ -69,33 +69,21 @@ class AuthService {
 
   // Create User Node in Firebase Realtime Database
   Future<void> _createUserInDatabase(User user, {String? phone}) async {
-    // Sanitize email to use as key (Firebase keys cannot contain '.', '#', '$', '[', or ']')
-    final String userKey = user.email!.replaceAll('.', ',');
-    final DatabaseReference userRef = FirebaseDatabase.instance.ref().child('users').child(userKey);
+    final DatabaseReference userRef = FirebaseDatabase.instance.ref().child('users').child(user.uid);
     
-    // Check if users/{userKey} already exists
+    // Check if users/{uid} already exists
     final snapshot = await userRef.get();
     if (snapshot.exists) return;
 
     // Create node if it doesn't exist
     await userRef.set({
       "profile": {
-        "uid": user.uid, // Still store the actual UID for reference
+        "uid": user.uid,
         "name": user.displayName ?? "User",
         "email": user.email ?? "",
         "phone": phone ?? "",
         "createdAt": ServerValue.timestamp,
-      },
-      "motors": {
-        "1": {"isOn": false},
-        "2": {"isOn": false},
-        "3": {"isOn": false}
-      },
-      "plants": {
-        "1": {"name": "Plant 1", "moisture": 0},
-        "2": {"name": "Plant 2", "moisture": 0}
-      },
-      "schedules": {}
+      }
     });
   }
 
@@ -237,12 +225,16 @@ class AuthService {
     try {
       await _auth.signOut();
       await _googleSignIn.signOut();
-      
-      // 9. Logout Fully Safe: Only remove auth-related keys
-      await _prefs.remove('isLoggedIn');
-      await _secureStorage.deleteAll();
     } catch (e) {
-      throw AuthException("Logout failed.");
+      // We catch the error but don't throw it immediately to ensure local keys are still cleared
+    } finally {
+      // 9. Logout Fully Safe: Only remove auth-related keys
+      try {
+        await _prefs.remove('isLoggedIn');
+        await _secureStorage.deleteAll();
+      } catch (e) {
+        throw AuthException("Logout failed to clear local storage.");
+      }
     }
   }
 

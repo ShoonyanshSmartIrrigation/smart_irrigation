@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_service.dart';
+import 'dashboard_service.dart';
 
 //-------------------------------------------------------- SettingsService Class ----------------------------------------------------------
 class SettingsService extends ChangeNotifier {
@@ -159,6 +160,8 @@ class SettingsService extends ChangeNotifier {
   Future<void> logout() async {
     try {
       await _authService.logout();
+
+      DashboardService().reset();
 
       // Reset local state to defaults
       minMoisture = 30;

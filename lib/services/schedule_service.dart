@@ -88,32 +88,38 @@ class ScheduleService extends ChangeNotifier {
     _startLocalTimer();
   }
 
-  String get _userEmailKey => _auth.currentUser?.email?.replaceAll('.', ',') ?? "anonymous";
-  String get _basePath => "users/$_userEmailKey/schedule/data";
+  String? _deviceId;
+  String get _basePath => _deviceId != null ? "devices/$_deviceId/schedules" : "pending";
 
   void _initListener() {
-    _auth.authStateChanges().listen((user) {
+    _auth.authStateChanges().listen((user) async {
       _subscription?.cancel();
       if (user != null) {
-        final emailKey = user.email?.replaceAll('.', ',') ?? "anonymous";
-        _subscription = _db.ref("users/$emailKey/schedule/data").onValue.listen((event) {
-          if (event.snapshot.exists) {
-            try {
-              final Map<dynamic, dynamic> data = event.snapshot.value as Map;
-              _schedules = data.entries.map((e) {
-                return WateringSchedule.fromJson(Map<String, dynamic>.from(e.value));
-              }).toList();
-              _schedules.sort((a, b) => a.time.compareTo(b.time));
-            } catch (e) {
-              debugPrint("Error parsing schedules: $e");
+        // Fetch deviceId from users node
+        final userDoc = await _db.ref("users/${user.uid}").get();
+        if (userDoc.exists && userDoc.child("deviceId").exists) {
+          _deviceId = userDoc.child("deviceId").value as String;
+          
+          _subscription = _db.ref("devices/$_deviceId/schedules").onValue.listen((event) {
+            if (event.snapshot.exists) {
+              try {
+                final Map<dynamic, dynamic> data = event.snapshot.value as Map;
+                _schedules = data.entries.map((e) {
+                  return WateringSchedule.fromJson(Map<String, dynamic>.from(e.value));
+                }).toList();
+                _schedules.sort((a, b) => a.time.compareTo(b.time));
+              } catch (e) {
+                debugPrint("Error parsing schedules: $e");
+                _schedules = [];
+              }
+            } else {
               _schedules = [];
             }
-          } else {
-            _schedules = [];
-          }
-          notifyListeners();
-        });
+            notifyListeners();
+          });
+        }
       } else {
+        _deviceId = null;
         _schedules = [];
         notifyListeners();
       }

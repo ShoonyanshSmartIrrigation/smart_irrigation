@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:wifi_scan/wifi_scan.dart';
-import 'package:wifi_iot/wifi_iot.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -37,6 +35,7 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
   bool mainMotor = false;
   bool autoMode = false;
   String connectionStatus = DashboardStrings.disconnected;
+  String lastSeenText = "";
   String userName = "User";
   bool mainPumpError = false;
   bool autoModeError = false;
@@ -49,9 +48,9 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
   String weatherIcon = "01d";
 
   // Device Setup State
-  bool isDeviceConfigured = true; 
+  bool isDeviceConfigured = true;
   bool isConfiguringDevice = false;
-  List<dynamic> scannedNetworks = []; 
+  List<dynamic> scannedNetworks = [];
   String? configurationError;
 
   // Internal flags
@@ -80,7 +79,7 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
       await loadUserData();
       await checkDeviceConfiguration();
       await fetchWeatherData();
-      
+
       _setupConnectivityListener();
       _startPeriodicTasks();
       _isInitialized = true;
@@ -97,7 +96,7 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   @override
-    //-------------------------------------------------------- Dispose Method ----------------------------------------------------------
+  //-------------------------------------------------------- Dispose Method ----------------------------------------------------------
   void dispose() {
     _isDisposed = true;
     WidgetsBinding.instance.removeObserver(this);
@@ -114,6 +113,21 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
     if (!_isDisposed) {
       super.notifyListeners();
     }
+  }
+
+  // Reset method called on logout
+  void reset() {
+    _isInitialized = false;
+    userName = "User";
+    lastSeenText = "";
+    connectionStatus = DashboardStrings.disconnected;
+    isDeviceConfigured = false;
+    _moistureTimer?.cancel();
+    _irrigationTimer?.cancel();
+    _connectionCheckTimer?.cancel();
+    _connectivityDebounce?.cancel();
+    _connectivitySubscription?.cancel();
+    notifyListeners();
   }
 
   void _updateState(VoidCallback fn) {
@@ -156,146 +170,12 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> startWifiScan() async {
-    debugPrint("DashboardService: Starting WiFi Scan...");
-    _updateState(() {
-      isConfiguringDevice = true;
-      configurationError = null;
-      scannedNetworks = [];
-    });
-
-    try {
-      if (!await WiFiForIoTPlugin.isEnabled()) {
-        await WiFiForIoTPlugin.setEnabled(true);
-        await Future.delayed(const Duration(seconds: 2));
-      }
-
-      PermissionStatus status = await Permission.locationWhenInUse.request();
-      if (status.isDenied) throw "Location permission required.";
-
-      if (!await Permission.location.serviceStatus.isEnabled) {
-        throw "Please turn ON GPS to scan for devices.";
-      }
-
-      List<dynamic> results = [];
-      final canScan = await WiFiScan.instance.canStartScan();
-      if (canScan == CanStartScan.yes) {
-        await WiFiScan.instance.startScan();
-        await Future.delayed(const Duration(seconds: 4));
-        results = await WiFiScan.instance.getScannedResults();
-      }
-
-      // Fallback via wifi_scan is already handled above.
-
-      // Sort: ESP32 SSIDs first
-      results.sort((a, b) {
-        String ssidA = (a is WiFiAccessPoint) ? a.ssid : (a.ssid ?? "");
-        String ssidB = (b is WiFiAccessPoint) ? b.ssid : (b.ssid ?? "");
-        bool isAEsp = ssidA.toUpperCase().contains("ESP32");
-        bool isBEsp = ssidB.toUpperCase().contains("ESP32");
-        if (isAEsp && !isBEsp) return -1;
-        if (!isAEsp && isBEsp) return 1;
-        return ssidA.compareTo(ssidB);
-      });
-
-      _updateState(() {
-        scannedNetworks = results;
-        isConfiguringDevice = false;
-        if (results.isEmpty) configurationError = "No devices found. Ensure ESP32 is nearby.";
-      });
-
-    } catch (e) {
-      _updateState(() {
-        configurationError = e.toString();
-        isConfiguringDevice = false;
-      });
-    }
-  }
-
-  Future<bool> connectToEspHotspot(String ssid, String password) async {
-    _updateState(() {
-      isConfiguringDevice = true;
-      configurationError = null;
-    });
-
-    try {
-      debugPrint("DashboardService: Connecting to Hotspot $ssid...");
-      bool connected = await WiFiForIoTPlugin.connect(
-        ssid,
-        password: password,
-        security: password.isEmpty ? NetworkSecurity.NONE : NetworkSecurity.WPA,
-        joinOnce: true,
-        withInternet: false,
-      ).timeout(const Duration(seconds: 25));
-
-      if (!connected) throw "Could not connect to $ssid.";
-
-      // Force WiFi usage for local requests (Fixes 404/Mobile data issues)
-      await WiFiForIoTPlugin.forceWifiUsage(true);
-      
-      await Future.delayed(const Duration(seconds: 4));
-      _updateState(() => isConfiguringDevice = false);
-      return true;
-    } catch (e) {
-      _updateState(() {
-        configurationError = "Connection failed: $e";
-        isConfiguringDevice = false;
-      });
-      return false;
-    }
-  }
-
-  Future<bool> sendWifiCredentials(String homeSSID, String homePassword) async {
-    _updateState(() {
-      isConfiguringDevice = true;
-      configurationError = null;
-    });
-
-    try {
-      final user = _auth.currentUser;
-      if (user == null) throw "User not logged in.";
-      
-      final email = user.email ?? "";
-      final uid = user.uid;
-      
-      debugPrint("DashboardService: Sending data to 192.168.4.1...");
-      
-      // Ensure we stay on WiFi for this request
-      await WiFiForIoTPlugin.forceWifiUsage(true);
-
-      final response = await http.post(
-        Uri.parse('http://192.168.4.1/config'),
-        body: {
-          'ssid': homeSSID, 
-          'password': homePassword, 
-          'email': email,
-          'uid': uid,
-        },
-      ).timeout(const Duration(seconds: 15));
-
-      // Release WiFi lock after request
-      await WiFiForIoTPlugin.forceWifiUsage(false);
-
-      if (response.statusCode == 200) {
-        _updateState(() => isConfiguringDevice = false);
-        return true;
-      } else {
-        throw "ESP32 Rejected Request (Status: ${response.statusCode})";
-      }
-    } catch (e) {
-      await WiFiForIoTPlugin.forceWifiUsage(false);
-      _updateState(() {
-        configurationError = "Setup failed: $e. Check connection to device.";
-        isConfiguringDevice = false;
-      });
-      return false;
-    }
-  }
-
   // --- Normal Dashboard Logic ---
   void _setupConnectivityListener() {
     _connectivitySubscription?.cancel();
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      List<ConnectivityResult> results,
+    ) {
       _connectivityDebounce?.cancel();
       _connectivityDebounce = Timer(const Duration(milliseconds: 500), () {
         if (results.contains(ConnectivityResult.none)) {
@@ -309,7 +189,9 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
 
   void _startPeriodicTasks() {
     _connectionCheckTimer?.cancel();
-    _connectionCheckTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
+    _connectionCheckTimer = Timer.periodic(const Duration(seconds: 15), (
+      timer,
+    ) {
       checkEspConnection();
     });
 
@@ -323,27 +205,53 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
   Future<bool> checkEspConnection() async {
     if (_isDisposed) return false;
     try {
-      final statusMap = await _esp32Service.getSystemStatus().timeout(const Duration(seconds: 5));
+      final statusMap = await _esp32Service.getSystemStatus().timeout(
+        const Duration(seconds: 5),
+      );
       bool isConnected = statusMap?['status'] == 'ok';
 
+      String lastSeenStr = "";
+      if (statusMap?.containsKey('lastSeen') == true && statusMap!['lastSeen'] != null) {
+        int lastSeen = statusMap['lastSeen'] as int;
+        if (lastSeen > 0) {
+          final lastSeenDate = DateTime.fromMillisecondsSinceEpoch(lastSeen * 1000);
+          final diff = DateTime.now().difference(lastSeenDate);
+          if (diff.inMinutes < 1) {
+            lastSeenStr = "Just now";
+          } else if (diff.inHours < 1) {
+            lastSeenStr = "\${diff.inMinutes}m ago";
+          } else if (diff.inDays < 1) {
+            lastSeenStr = "\${diff.inHours}h ago";
+          } else {
+            lastSeenStr = "\${diff.inDays}d ago";
+          }
+        }
+      }
+
       _updateState(() {
-        connectionStatus = isConnected ? DashboardStrings.systemOnline : DashboardStrings.disconnected;
+        connectionStatus = isConnected
+            ? DashboardStrings.systemOnline
+            : DashboardStrings.disconnected;
+        lastSeenText = lastSeenStr;
         if (isConnected) {
           mainMotor = statusMap!['mainMotor'] == 'on';
           autoMode = statusMap['autoMode'] == true;
-          
+
           _dataManager.mainMotorOn = mainMotor;
           _dataManager.isSystemAutoMode = autoMode;
 
           if (statusMap.containsKey('activeMotorsList')) {
             List<dynamic> activeList = statusMap['activeMotorsList'];
             for (var plant in _dataManager.plants) {
-              plant.isMotorOn = activeList.contains(plant.id) || activeList.contains(plant.id.toString());
+              plant.isMotorOn =
+                  activeList.contains(plant.id) ||
+                  activeList.contains(plant.id.toString());
             }
           }
-          
+
           try {
-            PlantService().notifyListeners(); // Force Plant Control Screen to refresh UI
+            PlantService()
+                .notifyListeners(); // Force Plant Control Screen to refresh UI
           } catch (_) {}
         }
       });
@@ -359,17 +267,19 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
     _isProcessingMainPump = true;
     try {
       // Act as Master Switch: Toggle ALL motors on/off
-      bool success = await _esp32Service.toggleAllMotors(value).timeout(const Duration(seconds: 5));
+      bool success = await _esp32Service
+          .toggleAllMotors(value)
+          .timeout(const Duration(seconds: 5));
       _updateState(() {
-          if (success) {
-            mainMotor = value;
-            mainPumpError = false;
-            
-            // Update DataManager state to reflect on Plant Control Screen
-            _dataManager.mainMotorOn = value;
-            _dataManager.isSystemAutoMode = value;
-            _dataManager.updateAllMotorsLocally(value);
-          
+        if (success) {
+          mainMotor = value;
+          mainPumpError = false;
+
+          // Update DataManager state to reflect on Plant Control Screen
+          _dataManager.mainMotorOn = value;
+          _dataManager.isSystemAutoMode = value;
+          _dataManager.updateAllMotorsLocally(value);
+
           // Notify PlantService to update UI on Plant Control Screen
           try {
             PlantService().notifyListeners();
@@ -401,7 +311,9 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
     if (_isProcessingAutoMode || _isDisposed) return false;
     _isProcessingAutoMode = true;
     try {
-      bool success = await _esp32Service.toggleAllMotors(value).timeout(const Duration(seconds: 5));
+      bool success = await _esp32Service
+          .toggleAllMotors(value)
+          .timeout(const Duration(seconds: 5));
       _updateState(() {
         if (success) {
           autoMode = value;
@@ -445,15 +357,15 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
     _updateState(() => timerSeconds = selectedMinutes * 60);
     _irrigationTimer?.cancel();
     _irrigationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_isDisposed) { 
-        timer.cancel(); 
-        return; 
+      if (_isDisposed) {
+        timer.cancel();
+        return;
       }
       if (timerSeconds > 0) {
         _updateState(() => timerSeconds--);
-      } else { 
-        timer.cancel(); 
-        _finalizeIrrigation(); 
+      } else {
+        timer.cancel();
+        _finalizeIrrigation();
       }
     });
   }
@@ -487,5 +399,6 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
 
   DataManager get dataManager => _dataManager;
   bool get isIrrigationRunning => _irrigationTimer?.isActive ?? false;
-  Stream<List<ConnectivityResult>> get connectivityStream => Connectivity().onConnectivityChanged;
+  Stream<List<ConnectivityResult>> get connectivityStream =>
+      Connectivity().onConnectivityChanged;
 }

@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import '../data_manager.dart';
+import 'esp32_service.dart';
 
 //-------------------------------------------------------- PlantService Class ----------------------------------------------------------
 class PlantService extends ChangeNotifier {
@@ -12,6 +10,7 @@ class PlantService extends ChangeNotifier {
   PlantService._internal();
 
   final DataManager _dataManager = DataManager();
+  final Esp32Service _esp32Service = Esp32Service();
   
   // State
   bool isSyncing = false;
@@ -46,7 +45,7 @@ class PlantService extends ChangeNotifier {
   void startSync() {
     fetchMoistureData();
     _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+    _syncTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       fetchMoistureData();
     });
   }
@@ -55,39 +54,16 @@ class PlantService extends ChangeNotifier {
     _syncTimer?.cancel();
   }
 
-  Future<String?> _getBaseUrl() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      String? ip = prefs.getString("esp_ip");
-      int port = prefs.getInt("esp_port") ?? 80;
-      if (ip == null || ip.isEmpty) return null;
-      return "http://$ip:$port";
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // Fetch moisture data from ESP32 with Retry Strategy
-  Future<bool> fetchMoistureData({int retry = 2}) async {
+  // Fetch moisture data from ESP32 or Firebase
+  Future<bool> fetchMoistureData({int retry = 1}) async {
     if (isSyncing || _isDisposed) return false;
     
-    final baseUrl = await _getBaseUrl();
-    if (baseUrl == null) {
-      debugPrint("Moisture Sync: No ESP32 IP configured.");
-      return false;
-    }
-
     isSyncing = true;
     notifyListeners();
 
     try {
-      final res = await http
-          .get(Uri.parse("$baseUrl/api/moisture"))
-          .timeout(const Duration(seconds: 2));
-      
-      if (res.statusCode == 200) {
-        final Map<String, dynamic> data = jsonDecode(res.body);
-
+      final data = await _esp32Service.getMoistureData();
+      if (data != null) {
         for (var plant in _dataManager.plants) {
           String sensorKey = "sensor_${plant.id}";
           if (data.containsKey(sensorKey)) {
@@ -96,43 +72,35 @@ class PlantService extends ChangeNotifier {
               plant.moistureLevel = newMoisture;
             }
             
-              // Auto Mode logic based on thresholds
-              if (plant.isAutoMode && !_dataManager.isSystemAutoMode) {
-                if (plant.moistureLevel < plant.minMoistureThreshold && !plant.isMotorOn) {
-                  togglePlantMotor(plant, isOn: true);
-                } else if (plant.moistureLevel >= plant.maxMoistureThreshold && plant.isMotorOn) {
-                  togglePlantMotor(plant, isOn: false);
-                }
-              }
-          }
-        }
-        
-        // Fetch latest system status to sync motor states
-        try {
-          final statusRes = await http.get(Uri.parse("$baseUrl/api/system/status"))
-              .timeout(const Duration(seconds: 2));
-          if (statusRes.statusCode == 200) {
-            final Map<String, dynamic> statusData = jsonDecode(statusRes.body);
-            if (statusData.containsKey('activeMotorsList')) {
-              List<dynamic> activeList = statusData['activeMotorsList'];
-              for (var plant in _dataManager.plants) {
-                plant.isMotorOn = activeList.contains(plant.id) || activeList.contains(plant.id.toString());
+            // Auto Mode logic based on thresholds
+            if (plant.isAutoMode && !_dataManager.isSystemAutoMode) {
+              if (plant.moistureLevel < plant.minMoistureThreshold && !plant.isMotorOn) {
+                togglePlantMotor(plant, isOn: true);
+              } else if (plant.moistureLevel >= plant.maxMoistureThreshold && plant.isMotorOn) {
+                togglePlantMotor(plant, isOn: false);
               }
             }
           }
-        } catch (_) {}
+        }
+        
+        // Sync system status briefly
+        final statusMap = await _esp32Service.getSystemStatus();
+        if (statusMap != null && statusMap.containsKey('activeMotorsList')) {
+          List<dynamic> activeList = statusMap['activeMotorsList'];
+          for (var plant in _dataManager.plants) {
+            plant.isMotorOn = activeList.contains(plant.id) || activeList.contains(plant.id.toString());
+          }
+        }
         
         lastUpdated = DateTime.now();
         isSyncing = false;
-        notifyListeners(); // Notify once after all updates
+        notifyListeners(); 
         return true;
-      } else {
-        throw Exception("Server Error: ${res.statusCode}");
       }
     } catch (e) {
       debugPrint("Moisture Sync Attempt Failed: $e");
       if (retry > 0 && !_isDisposed) {
-        isSyncing = false; // Reset to allow retry
+        isSyncing = false; 
         return fetchMoistureData(retry: retry - 1);
       }
     } finally {
@@ -142,20 +110,18 @@ class PlantService extends ChangeNotifier {
     return false;
   }
 
-  // Individual motor control with Debounce
+  // Individual motor control using Esp32Service Local/Firebase Logic
   Future<bool> togglePlantMotor(Plant plant, {bool? isOn}) async {
     if (_isProcessingToggle[plant.id] == true || _isDisposed) return false;
     
     _isProcessingToggle[plant.id] = true;
     bool targetState = isOn ?? !plant.isMotorOn;
-    
     notifyListeners();
 
     try {
-      bool success = await _dataManager.togglePlantMotorApi(plant.id, targetState)
-          .timeout(const Duration(seconds: 5));
-
+      bool success = await _esp32Service.toggleMotor(plant.id, targetState);
       if (success) {
+        plant.isMotorOn = targetState;
         plantConnectionErrors[plant.id] = false;
       } else {
         _handlePlantError(plant);
@@ -171,7 +137,7 @@ class PlantService extends ChangeNotifier {
   }
 
   void _handlePlantError(Plant plant) {
-    plant.isMotorOn = false; // Safe fallback
+    // Falls back to motor state from last sync if communication fails entirely
     plantConnectionErrors[plant.id] = true;
 
     // Auto-clear error after 3s
@@ -191,20 +157,9 @@ class PlantService extends ChangeNotifier {
     allMotorsError = false;
     notifyListeners();
 
-    final baseUrl = await _getBaseUrl();
-    if (baseUrl == null) {
-      isTogglingAll = false;
-      allMotorsError = true;
-      notifyListeners();
-      return;
-    }
-
     try {
-      final response = await http
-          .post(Uri.parse("$baseUrl/api/all/${value ? 'on' : 'off'}"))
-          .timeout(const Duration(seconds: 7));
-
-      if (response.statusCode == 200) {
+      bool success = await _esp32Service.toggleAllMotors(value);
+      if (success) {
         for (var plant in _dataManager.plants) {
           plant.isMotorOn = value;
         }

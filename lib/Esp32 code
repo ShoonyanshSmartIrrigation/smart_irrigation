@@ -7,6 +7,10 @@
 #include <WiFiManager.h>
 #include <time.h>
 #include <Preferences.h>
+#include <ESPmDNS.h>
+#include <Firebase_ESP_Client.h>
+#include "addons/TokenHelper.h"
+#include "addons/RTDBHelper.h"
 
 // Constants
 const int NUM_MOTORS = 9;  // 8 individual motors + 1 main motor
@@ -24,6 +28,11 @@ const char* ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 19800;   // IST = UTC +5:30
 const int daylightOffset_sec = 0;
 
+// Firebase Configuration
+#define FIREBASE_HOST "smartirrigationapp-929b3-default-rtdb.firebaseio.com"
+#define FIREBASE_AUTH "AIzaSyABns1_APrwZvAqodbL8EtjFtT6slQdijI"
+#define DEVICE_ID "device_9668"
+
 // Global variables
 WiFiManager wifiManager;
 WebServer server(80);
@@ -38,6 +47,15 @@ unsigned long lastWiFiCheck = 0;
 bool wifiConnected = false;
 unsigned long statusLedPreviousMillis = 0;
 int statusLedState = LOW;
+
+// Firebase variables
+FirebaseData fbdo;
+FirebaseData streamData; // Dedicated FirebaseData object for the background stream
+FirebaseAuth fbAuth;
+FirebaseConfig fbConfig;
+unsigned long lastFirebaseUpdate = 0;
+const unsigned long FIREBASE_UPDATE_INTERVAL = 30000; // 30 seconds
+bool firebaseInitialized = false;
 
 // Auto mode variables
 bool autoMode = false;
@@ -87,6 +105,10 @@ void reportMotorStatus();
 void debugHTTPRequests();
 void saveMotorSettings(int motorIndex);
 void loadAllMotorSettings();
+void initializeFirebase();
+void updateFirebaseStatus();
+void streamCallback(FirebaseStream data);
+void streamTimeoutCallback(bool timeout);
 
 // ─── Helper: CORS headers ─────────────────────────────────────────────────────
 void sendCORSHeaders() {
@@ -592,6 +614,7 @@ void debugHTTPRequests() {
 }
 
 // ─── setup() ─────────────────────────────────────────────────────────────────
+#define LED_BUILTIN 2
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -669,6 +692,14 @@ void setup() {
   loadAllMotorSettings();
   setupServer();
   server.begin();
+  
+  if (MDNS.begin("smart-irrigation")) {
+    MDNS.addService("http", "tcp", 80);
+    Serial.println("mDNS responder started: smart-irrigation.local");
+  }
+
+  initializeFirebase();
+
   Serial.println("🌐 HTTP Server Started\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 }
 
@@ -692,6 +723,7 @@ void loop() {
   handleIndividualMotorsLED();
   readAllMoistureSensors();
   reportMotorStatus();
+  updateFirebaseStatus();
   debugHTTPRequests();
 }
 
@@ -808,6 +840,7 @@ void setupServer() {
       avgMoisture /= NUM_SENSORS;
 
       String json = "{\"status\":\"ok\","
+                    "\"deviceId\":\"device_9668\","
                     "\"mainMotor\":\"" + String(motorStates[0] ? "on" : "off") + "\","
                                                                                  "\"mainMotorGpio\":" + String(MOTOR_PINS[0]) + ","
                                                                                                                                 "\"totalMotors\":" + String(NUM_MOTORS) + ","
@@ -1180,56 +1213,49 @@ function controlMotor(id,action){
     .then(r=>r.json()).then(d=>{motorStates[id]=action==='on';renderMotorGrid();showStatus('Motor '+id+' '+action,'success')})
     .catch(e=>showStatus('Error: '+e.message,'error'));
 }
-function startAuto(){
-  let duration=document.getElementById('duration').value||25;
-  fetch('/api/auto/start',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({duration:parseInt(duration),motors:[1,2,3,4,5,6,7,8]})})
-    .then(r=>r.json()).then(d=>{updateUI();showStatus('Auto mode started for '+duration+' minutes','success')})
-    .catch(e=>showStatus('Error: '+e.message,'error'));
-}
-function stopAuto(){
-  fetch('/api/auto/stop',{method:'POST'}).then(r=>r.json())
-    .then(d=>{updateUI();showStatus('Auto mode stopped','success')})
-    .catch(e=>showStatus('Error: '+e.message,'error'));
-}
+
 function renderMotorGrid(){
-  let grid='';
-  for(let i=1;i<=8;i++){
-    let on=motorStates[i]||false;
-    grid+='<div class="motor-card '+(on?'on':'off')+'">'
-      +'<h3>Motor '+i+'</h3><p>'+(on?'🔴 ON':'⚫ OFF')+'</p>'
-      +'<button class="btn" onclick="controlMotor('+i+',\'on\')">ON</button>'
-      +'<button class="btn btn-danger" onclick="controlMotor('+i+',\'off\')">OFF</button>'
-      +'</div>';
+  const g=document.getElementById('motorGrid');
+  if(!g) return;
+  g.innerHTML='';
+  for(let i=1;i<9;i++){
+    const state=motorStates[i]?'on':'off';
+    g.innerHTML+=`<div class='motor-card ${state}'><h3>Motor ${i}</h3>
+<button class='btn' onclick='controlMotor(${i},"on")'>ON</button>
+<button class='btn btn-danger' onclick='controlMotor(${i},"off")'>OFF</button></div>`;
   }
-  document.getElementById('motorGrid').innerHTML=grid;
 }
-function updateUI(){
-  fetch('/api/system/status').then(r=>r.json()).then(d=>{
-    let mode=d.autoMode?'🤖 AUTO':'👤 MANUAL';
-    document.getElementById('status').innerHTML='Mode: '+mode
-      +' | Main Motor: '+(d.mainMotor=='on'?'🔴 ON':'⚫ OFF')
-      +(d.autoTimeRemaining?' | Time: '+d.autoTimeRemaining+'s':'');
-    renderMotorGrid();
-  }).catch(e=>showStatus('Error updating UI','error'));
+
+function startAuto(){
+  const dur=document.getElementById('duration').value || 25;
+  fetch('/api/auto/start',{method:'POST',body:JSON.stringify({duration:dur})})
+  .then(r=>r.json()).then(d=>showStatus('Auto started','success')).catch(e=>showStatus('Error','error'));
 }
+
+function stopAuto(){
+  fetch('/api/auto/stop',{method:'POST'})
+  .then(r=>r.json()).then(d=>showStatus('Auto stopped','success')).catch(e=>showStatus('Error','error'));
+}
+
 function loadSensors(){
   fetch('/api/moisture').then(r=>r.json()).then(d=>{
-    let html='<h3>Main Motor Moisture: '+d.main_motor.percent+'%</h3>';
-    for(let i=1;i<=8;i++){html+='<p>Sensor '+i+': '+d['sensor_'+i].percent+'%</p>';}
-    document.getElementById('sensorData').innerHTML=html;
-  }).catch(e=>showStatus('Error loading sensors','error'));
+    let h='<p>Main Motor: '+d.main_motor.percent+'%</p>';
+    for(let i=1;i<9;i++){
+        if(d['sensor_'+i]) h+='<p>Sensor '+i+': '+d['sensor_'+i].percent+'%</p>';
+    }
+    document.getElementById('sensorData').innerHTML=h;
+  }).catch(e=>showStatus('Error','error'));
 }
+
+function updateUI(){
+  renderMotorGrid();
+}
+
 function loadSystem(){
   fetch('/api/system/status').then(r=>r.json()).then(d=>{
-    document.getElementById('systemData').innerHTML=
-      '<p>WiFi: '+d.status+'</p>'
-      +'<p>Mode: '+(d.autoMode?'Auto':'Manual')+'</p>'
-      +'<p>Active Motors: '+d.activeMotors+'/'+d.totalMotors+'</p>'
-      +'<p>Avg Moisture: '+d.avgMoisture+'%</p>'
-      +'<p>Uptime: '+(d.uptime/1000).toFixed(1)+'s</p>'
-      +'<p>Free Heap: '+d.freeHeap+' bytes</p>'
-      +(d.autoTimeRemaining?'<p>⏱️ Auto Time Remaining: '+d.autoTimeRemaining+'s</p>':'');
+    let h='<p>Active Motors: '+d.activeMotors+' / '+d.totalMotors+'</p>';
+    document.getElementById('systemData').innerHTML=h+(d.autoMode?
+'<p>⏱️ Auto Time Remaining: '+d.autoTimeRemaining+'s</p>':'');
   }).catch(e=>showStatus('Error loading system','error'));
 }
 function showStatus(msg,type){
@@ -1242,4 +1268,84 @@ updateUI(); loadSensors(); loadSystem();
 )rawhtml";
       server.send(200, "text/html", html);
   });
+}
+// --- Firebase: Initialize ---------------------------------------------------
+void initializeFirebase() {
+  fbConfig.host = FIREBASE_HOST;
+  fbConfig.signer.tokens.legacy_token = FIREBASE_AUTH;
+
+  Firebase.begin(&fbConfig, &fbAuth);
+  Firebase.reconnectWiFi(true);
+
+  // Set up Firebase Stream to listen for motor control changes
+  if (!Firebase.RTDB.beginStream(&streamData, "/devices/" DEVICE_ID)) {
+    Serial.printf("Firebase stream begin error: %s\n", streamData.errorReason().c_str());
+  } else {
+    Firebase.RTDB.setStreamCallback(&streamData, streamCallback, streamTimeoutCallback);
+    Serial.print("📡 Firebase Stream initialized for ID: ");
+    Serial.println(DEVICE_ID);
+    
+    // Set status to "on"
+    // Note: onDisconnect() is not supported by Firebase_ESP_Client via REST API. 
+    // Presence is handled via the "lastSeen" heartbeat in updateFirebaseStatus().
+    String statusPath = "/devices/" + String(DEVICE_ID) + "/status";
+    Firebase.RTDB.setString(&fbdo, statusPath.c_str(), "on");
+    
+    firebaseInitialized = true;
+  }
+}
+
+// --- Firebase: Periodic Update ----------------------------------------------
+void updateFirebaseStatus() {
+  if (!firebaseInitialized || !Firebase.ready()) return;
+
+  if (millis() - lastFirebaseUpdate >= FIREBASE_UPDATE_INTERVAL) {
+    lastFirebaseUpdate = millis();
+
+    FirebaseJson status;
+    status.set("ip", WiFi.localIP().toString());
+    status.set("lastSeen", (int)time(NULL));
+    status.set("mainMotorMoisture", mainMotorMoisturePercent);
+    status.set("status", "on"); // Always "on" while we are running and connected
+    
+    FirebaseJson moisture;
+    for (int i = 0; i < NUM_SENSORS; i++) {
+        moisture.set("sensor_" + String(i + 1), moisturePercents[i]);
+    }
+    status.set("moisture", moisture);
+
+    if (Firebase.RTDB.updateNode(&fbdo, "/devices/" DEVICE_ID, &status)) {
+      Serial.println("📡 Firebase status updated");
+    } else {
+      Serial.printf("Firebase update error: %s\n", fbdo.errorReason().c_str());
+    }
+  }
+}
+
+// --- Firebase: Stream Callback ---------------------------------------------
+void streamCallback(FirebaseStream data) {
+  Serial.printf("📡 Stream update: %s %s %s\n", data.streamPath().c_str(), data.dataPath().c_str(), data.payload().c_str());
+  
+  // If the update is specifically for a motor
+  if (data.dataPath().startsWith("/motors/")) {
+    int motorIdx = data.dataPath().substring(8).toInt();
+    if (motorIdx >= 0 && motorIdx < NUM_MOTORS) {
+      bool newState = (data.payload() == "true");
+      if (motorStates[motorIdx] != newState) {
+        motorStates[motorIdx] = newState;
+        digitalWrite(MOTOR_PINS[motorIdx], newState ? HIGH : LOW);
+        Serial.printf("📡 Firebase set Motor %d to %s\n", motorIdx, newState ? "ON" : "OFF");
+      }
+    }
+  }
+  
+  // If the update is for "stopAll"
+  if (data.dataPath() == "/stopAll" && data.payload() == "true") {
+    stopAllMotors();
+    Firebase.RTDB.setBool(&fbdo, "/devices/" DEVICE_ID "/stopAll", false);
+  }
+}
+
+void streamTimeoutCallback(bool timeout) {
+  if (timeout) Serial.println("📡 Firebase Stream timeout");
 }
