@@ -229,6 +229,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onRefresh: () async {
           _service.loadUserData();
           await _service.checkEspConnection();
+          await _service.fetchWeatherData();
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -772,7 +773,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -787,16 +788,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                "WEATHER",
-                style: TextStyle(
-                  color: AppColors.grey,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
-                ),
+              Row(
+                children: [
+                  const Text(
+                    "WEATHER",
+                    style: TextStyle(
+                      color: AppColors.grey,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Icon(
+                    Icons.location_on,
+                    size: 12,
+                    color: AppColors.grey,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _service.weatherCity,
+                    style: const TextStyle(
+                      color: AppColors.grey,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 8),
               Text(
                 _service.weatherCondition,
                 style: const TextStyle(

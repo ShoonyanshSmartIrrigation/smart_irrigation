@@ -46,6 +46,7 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
   String weatherCondition = "Mostly Sunny";
   String weatherTemp = "28°C";
   String weatherIcon = "01d";
+  String weatherCity = "Unknown City";
 
   // Device Setup State
   bool isDeviceConfigured = true;
@@ -122,6 +123,7 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
     lastSeenText = "";
     connectionStatus = DashboardStrings.disconnected;
     isDeviceConfigured = false;
+    weatherCity = "Unknown City";
     _moistureTimer?.cancel();
     _irrigationTimer?.cancel();
     _connectionCheckTimer?.cancel();
@@ -163,9 +165,14 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
     final data = await WeatherService().fetchWeather();
     if (data != null && !_isDisposed) {
       _updateState(() {
-        weatherTemp = "${data['main']['temp'].round()}°C";
-        weatherCondition = data['weather'][0]['main'];
-        weatherIcon = data['weather'][0]['icon'];
+        if (data.containsKey('error')) {
+          weatherCity = data['error'];
+        } else {
+          weatherTemp = "${data['main']['temp'].round()}°C";
+          weatherCondition = data['weather'][0]['main'];
+          weatherIcon = data['weather'][0]['icon'];
+          weatherCity = data['name'] ?? "Unknown City";
+        }
       });
     }
   }

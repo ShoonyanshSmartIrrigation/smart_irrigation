@@ -7,10 +7,7 @@
 #include <WiFiManager.h>
 #include <time.h>
 #include <Preferences.h>
-#include <ESPmDNS.h>
-#include <Firebase_ESP_Client.h>
-#include "addons/TokenHelper.h"
-#include "addons/RTDBHelper.h"
+#include <NimBLEDevice.h>
 
 // Constants
 const int NUM_MOTORS = 9;  // 8 individual motors + 1 main motor
@@ -28,10 +25,15 @@ const char* ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 19800;   // IST = UTC +5:30
 const int daylightOffset_sec = 0;
 
-// Firebase Configuration
-#define FIREBASE_HOST "smartirrigationapp-929b3-default-rtdb.firebaseio.com"
-#define FIREBASE_AUTH "AIzaSyABns1_APrwZvAqodbL8EtjFtT6slQdijI"
-#define DEVICE_ID "device_9668"
+// BLE Service and Characteristic UUIDs
+#define BLE_SERVICE_UUID "12345678-1234-1234-1234-1234567890ab"
+#define BLE_CTRL_CHAR_UUID "ctrl-001"
+#define BLE_TELE_CHAR_UUID "tele-001"
+#define BLE_SYS_CHAR_UUID "sys-001"
+
+// BLE Configuration
+const unsigned long BLE_NOTIFY_INTERVAL = 3000;  // 3 seconds
+const int BLE_MTU_SIZE = 20;  // Small MTU for reliability
 
 // Global variables
 WiFiManager wifiManager;
@@ -47,15 +49,6 @@ unsigned long lastWiFiCheck = 0;
 bool wifiConnected = false;
 unsigned long statusLedPreviousMillis = 0;
 int statusLedState = LOW;
-
-// Firebase variables
-FirebaseData fbdo;
-FirebaseData streamData; // Dedicated FirebaseData object for the background stream
-FirebaseAuth fbAuth;
-FirebaseConfig fbConfig;
-unsigned long lastFirebaseUpdate = 0;
-const unsigned long FIREBASE_UPDATE_INTERVAL = 30000; // 30 seconds
-bool firebaseInitialized = false;
 
 // Auto mode variables
 bool autoMode = false;
@@ -74,14 +67,21 @@ int lastAlarmTriggerDay = -1;
 
 // Per Motor Plant Settings
 String motorPlantNames[NUM_MOTORS] = {
-        "Main Motor","Plant 1","Plant 2","Plant 3","Plant 4",
-        "Plant 5","Plant 6","Plant 7","Plant 8"
+  "Main Motor","Plant 1","Plant 2","Plant 3","Plant 4",
+  "Plant 5","Plant 6","Plant 7","Plant 8"
 };
 int motorMoistureThreshold[NUM_MOTORS] = {40,40,40,40,40,40,40,40,40};
 int motorRunDuration[NUM_MOTORS] = {15,15,15,15,15,15,15,15,15};
 bool motorAutoEnabled[NUM_MOTORS] = {false,false,false,false,false,false,false,false,false};
 unsigned long motorStartTime[NUM_MOTORS] = {0,0,0,0,0,0,0,0,0};
 bool motorAutoRunning[NUM_MOTORS] = {false,false,false,false,false,false,false,false,false};
+
+// BLE Global Variables
+NimBLEServer* pBLEServer = nullptr;
+NimBLECharacteristic* pTelemetryChar = nullptr;
+NimBLECharacteristic* pSystemChar = nullptr;
+unsigned long lastBLENotify = 0;
+bool bleInitialized = false;
 
 // Forward declarations
 void setupServer();
@@ -105,10 +105,8 @@ void reportMotorStatus();
 void debugHTTPRequests();
 void saveMotorSettings(int motorIndex);
 void loadAllMotorSettings();
-void initializeFirebase();
-void updateFirebaseStatus();
-void streamCallback(FirebaseStream data);
-void streamTimeoutCallback(bool timeout);
+void initBLE();
+void handleBLENotifications();
 
 // ─── Helper: CORS headers ─────────────────────────────────────────────────────
 void sendCORSHeaders() {
@@ -163,10 +161,10 @@ void loadAllMotorSettings() {
     motorAutoEnabled[i] = preferences.getBool(key.c_str(), false);
 
     Serial.println("📋 Motor " + String(i+1) +
-                   " | Plant: " + motorPlantNames[i] +
-                   " | Threshold: " + String(motorMoistureThreshold[i]) + "%" +
-                   " | Duration: " + String(motorRunDuration[i]) + "min" +
-                   " | Auto: " + String(motorAutoEnabled[i] ? "ON" : "OFF"));
+      " | Plant: " + motorPlantNames[i] +
+      " | Threshold: " + String(motorMoistureThreshold[i]) + "%" +
+      " | Duration: " + String(motorRunDuration[i]) + "min" +
+      " | Auto: " + String(motorAutoEnabled[i] ? "ON" : "OFF"));
   }
 
   preferences.end();
@@ -177,7 +175,7 @@ void loadAllMotorSettings() {
 void checkPerMotorAutoIrrigation() {
   // Skip completely if alarm is running - prevent interference
   if (alarmRunning) return;
-
+  
   for (int i = 0; i < NUM_MOTORS; i++) {
     if (!motorAutoEnabled[i]) continue;
     if (autoMode) continue;
@@ -214,9 +212,9 @@ void checkPerMotorAutoIrrigation() {
       digitalWrite(MOTOR_PINS[0], HIGH);
 
       Serial.println("💧 Motor " + String(i) +
-                     " auto started | Plant: " + motorPlantNames[i] +
-                     " | Moisture: " + String(currentMoisture) + "%" +
-                     " | Threshold: " + String(motorMoistureThreshold[i]) + "%");
+        " auto started | Plant: " + motorPlantNames[i] +
+        " | Moisture: " + String(currentMoisture) + "%" +
+        " | Threshold: " + String(motorMoistureThreshold[i]) + "%");
     }
   }
 }
@@ -292,7 +290,7 @@ void checkAlarmIrrigation() {
   if (alarmEnabled && !alarmRunning && currentDay != lastAlarmTriggerDay) {
     if (currentHour == alarmHour && currentMinute == alarmMinute) {
       Serial.println("⏰ ALARM TRIGGERED at " + String(currentHour) + ":" + String(currentMinute));
-
+      
       alarmRunning = true;
       alarmStartMillis = millis();
       lastAlarmTriggerDay = currentDay;
@@ -340,30 +338,30 @@ void checkWiFiConnection() {
   static int reconnectAttempts = 0;
   const unsigned long RECONNECT_INTERVAL = 30000; // 30 seconds (less frequent)
   const int MAX_RECONNECT_ATTEMPTS = 5; // More attempts before reset
-
+  
   if (millis() - lastWiFiCheck >= WIFI_CHECK_INTERVAL) {
     lastWiFiCheck = millis();
 
     if (WiFi.status() != WL_CONNECTED) {
       wifiConnected = false;
-
+      
       // Non-blocking reconnection attempt
       if (millis() - lastReconnectAttempt >= RECONNECT_INTERVAL && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         lastReconnectAttempt = millis();
         reconnectAttempts++;
-
+        
         Serial.println("❌ WiFi disconnected! Attempt " + String(reconnectAttempts) + "/" + String(MAX_RECONNECT_ATTEMPTS));
-
+        
         // Gentle reconnect (no blocking)
         WiFi.reconnect();
-
+        
         // Check connection after delay (non-blocking)
         if (WiFi.status() == WL_CONNECTED) {
           wifiConnected = true;
           reconnectAttempts = 0;
           Serial.println("✅ WiFi Reconnected! IP: " + WiFi.localIP().toString());
         }
-
+        
         // Only reset WiFi after many failed attempts (no credential reset)
         if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
           Serial.println("🔄 Max attempts reached, restarting WiFi...");
@@ -511,21 +509,20 @@ void readAllMoistureSensors() {
     int mainMoistureRaw = analogRead(MAIN_MOTOR_MOISTURE_PIN);
     mainMotorMoistureValue = mainMoistureRaw;
     float mainVoltage = (mainMoistureRaw * 3.3) / 4095.0;
-    if (mainVoltage < 0.771 || mainVoltage > 2.25) {
-      mainMotorMoisturePercent = -1; // Sensor open/not present
-    } else {
-      mainMotorMoisturePercent = constrain(((2.25 - mainVoltage) / (2.25 - 0.771)) * 100, 0, 100);
-    }
-
+    mainMotorMoisturePercent = constrain(((2.25 - mainVoltage) / (2.25 - 0.771)) * 100, 0, 100);
+    
     // Read individual plant moisture sensors
     for (int i = 0; i < NUM_SENSORS; i++) {
       int moistureRaw = analogRead(MOISTURE_SENSOR_PINS[i]);
       moistureValues[i] = moistureRaw;
       float voltage = (moistureRaw * 3.3) / 4095.0;
-      if (voltage < 0.771 || voltage > 2.25) {
-        moisturePercents[i] = -1; // Sensor open/not present
-      } else {
-        moisturePercents[i] = constrain(((2.25 - voltage) / (2.25 - 0.771)) * 100, 0, 100);
+      moisturePercents[i] = constrain(((2.25 - voltage) / (2.25 - 0.771)) * 100, 0, 100);
+      
+      // Debug output for sensor 1
+      if (i == 0) {
+        Serial.println("🔍 Sensor 1 Debug - Raw: " + String(moistureRaw) + " | Voltage: " + String(voltage, 3) + "V | GPIO: " + String(MOISTURE_SENSOR_PINS[i]));
+        Serial.println("✅ Sensor 1: Moisture: " + String(moisturePercents[i]) + "%");
+        Serial.println("🧮 Calculation: ((2.25 - " + String(voltage, 3) + ") / (2.25 - 0.771)) * 100 = " + String(((2.25 - voltage) / (2.25 - 0.771)) * 100) + "%");
       }
     }
   }
@@ -562,13 +559,13 @@ void reportMotorStatus() {
 
     if (alarmEnabled && !alarmRunning) {
       Serial.println("⏰ Next Alarm: " + String(alarmHour) + ":" +
-                     String(alarmMinute < 10 ? "0" : "") + String(alarmMinute));
+        String(alarmMinute < 10 ? "0" : "") + String(alarmMinute));
     }
 
     if (alarmRunning) {
       unsigned long remaining = alarmDuration - (millis() - alarmStartMillis);
       Serial.println("Alarm Time Remaining: " + String(remaining / 1000) + "s");
-
+      
       // Show which motors should be running vs actually running
       Serial.println("Alarm Motors Status:");
       for (int i = 0; i < NUM_MOTORS; i++) {
@@ -609,12 +606,11 @@ void debugHTTPRequests() {
     lastHTTPDebug = millis();
     String ip = WiFi.localIP().toString();
     Serial.println("🌐 HTTP Server: Active | Test: http://" + ip +
-                   "/test | Main Motor: http://" + ip + "/api/mainmotor/on");
+      "/test | Main Motor: http://" + ip + "/api/mainmotor/on");
   }
 }
 
 // ─── setup() ─────────────────────────────────────────────────────────────────
-#define LED_BUILTIN 2
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -642,11 +638,11 @@ void setup() {
   pinMode(MAIN_MOTOR_MOISTURE_PIN, INPUT);
 
   wifiManager.setAPCallback([](WiFiManager *myWiFiManager) {
-      Serial.println("📡 AP Mode Active: ESP32-Irrigation\n📡 IP: 192.168.4.1");
+    Serial.println("📡 AP Mode Active: ESP32-Irrigation\n📡 IP: 192.168.4.1");
   });
 
   wifiManager.setSaveConfigCallback([]() {
-      Serial.println("✅ WiFi configuration saved");
+    Serial.println("✅ WiFi configuration saved");
   });
 
   wifiManager.setConnectTimeout(10);
@@ -692,15 +688,11 @@ void setup() {
   loadAllMotorSettings();
   setupServer();
   server.begin();
+  Serial.println(" HTTP Server Started\n");
   
-  if (MDNS.begin("smart-irrigation")) {
-    MDNS.addService("http", "tcp", 80);
-    Serial.println("mDNS responder started: smart-irrigation.local");
-  }
-
-  initializeFirebase();
-
-  Serial.println("🌐 HTTP Server Started\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  // Initialize BLE
+  initBLE();
+  Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 }
 
 // ─── loop() ──────────────────────────────────────────────────────────────────
@@ -723,7 +715,9 @@ void loop() {
   handleIndividualMotorsLED();
   readAllMoistureSensors();
   reportMotorStatus();
-  updateFirebaseStatus();
+  
+  // Handle BLE notifications
+  handleBLENotifications();
   debugHTTPRequests();
 }
 
@@ -731,443 +725,450 @@ void loop() {
 void setupServer() {
   // Generic OPTIONS / 404 handler
   server.onNotFound([]() {
-      sendCORSHeaders();
-      if (server.method() == HTTP_OPTIONS) {
-        server.send(200, "text/plain", "");
-      } else {
-        server.send(404, "text/plain", "Not Found");
-      }
+    sendCORSHeaders();
+    if (server.method() == HTTP_OPTIONS) {
+      server.send(200, "text/plain", "");
+    } else {
+      server.send(404, "text/plain", "Not Found");
+    }
   });
 
   // Main motor ON
   server.on("/api/mainmotor/on", HTTP_ANY, []() {
-      sendCORSHeaders();
-      if (server.method() == HTTP_OPTIONS) {
-        server.send(200, "text/plain", "");
-        return;
-      }
-      autoMode = false;
-      motorStates[0] = true;
-      digitalWrite(MOTOR_PINS[0], HIGH);
-      sendJsonResponse("{\"status\":\"ok\",\"motor\":\"main\",\"motor_id\":0,\"led\":\"on\"}");
+    sendCORSHeaders();
+    if (server.method() == HTTP_OPTIONS) {
+      server.send(200, "text/plain", "");
+      return;
+    }
+    autoMode = false;
+    motorStates[0] = true;
+    digitalWrite(MOTOR_PINS[0], HIGH);
+    sendJsonResponse("{\"status\":\"ok\",\"motor\":\"main\",\"motor_id\":0,\"led\":\"on\"}");
   });
 
   // Main motor OFF
   server.on("/api/mainmotor/off", HTTP_ANY, []() {
-      sendCORSHeaders();
-      if (server.method() == HTTP_OPTIONS) {
-        server.send(200, "text/plain", "");
-        return;
-      }
-      autoMode = false;
-      motorStates[0] = false;
-      digitalWrite(MOTOR_PINS[0], LOW);
-      sendJsonResponse("{\"status\":\"ok\",\"motor\":\"main\",\"motor_id\":0,\"led\":\"off\"}");
+    sendCORSHeaders();
+    if (server.method() == HTTP_OPTIONS) {
+      server.send(200, "text/plain", "");
+      return;
+    }
+    autoMode = false;
+    motorStates[0] = false;
+    digitalWrite(MOTOR_PINS[0], LOW);
+    sendJsonResponse("{\"status\":\"ok\",\"motor\":\"main\",\"motor_id\":0,\"led\":\"off\"}");
   });
 
   // Individual motor ON
   server.on("/api/motor/on", HTTP_ANY, []() {
-      sendCORSHeaders();
-      if (server.method() == HTTP_OPTIONS) {
-        server.send(200, "text/plain", "");
-        return;
-      }
-      autoMode = false;
-      int motorId = constrain(server.arg("motor_id").toInt(), 0, 8);
-      motorStates[motorId] = true;
-      digitalWrite(MOTOR_PINS[motorId], HIGH);
-      sendJsonResponse("{\"status\":\"ok\",\"motor_id\":" + String(motorId) + ",\"state\":\"on\"}");
+    sendCORSHeaders();
+    if (server.method() == HTTP_OPTIONS) {
+      server.send(200, "text/plain", "");
+      return;
+    }
+    autoMode = false;
+    int motorId = constrain(server.arg("motor_id").toInt(), 0, 8);
+    motorStates[motorId] = true;
+    digitalWrite(MOTOR_PINS[motorId], HIGH);
+    sendJsonResponse("{\"status\":\"ok\",\"motor_id\":" + String(motorId) + ",\"state\":\"on\"}");
   });
 
   // Individual motor OFF
   // BUG FIX: Test page JS was calling /api/motor/on for both ON and OFF.
   // The endpoint itself was correct; fixed test page JS below.
   server.on("/api/motor/off", HTTP_ANY, []() {
-      sendCORSHeaders();
-      if (server.method() == HTTP_OPTIONS) {
-        server.send(200, "text/plain", "");
-        return;
-      }
-      autoMode = false;
-      int motorId = constrain(server.arg("motor_id").toInt(), 0, 8);
-      motorStates[motorId] = false;
-      digitalWrite(MOTOR_PINS[motorId], LOW);
-      sendJsonResponse("{\"status\":\"ok\",\"motor_id\":" + String(motorId) + ",\"state\":\"off\"}");
+    sendCORSHeaders();
+    if (server.method() == HTTP_OPTIONS) {
+      server.send(200, "text/plain", "");
+      return;
+    }
+    autoMode = false;
+    int motorId = constrain(server.arg("motor_id").toInt(), 0, 8);
+    motorStates[motorId] = false;
+    digitalWrite(MOTOR_PINS[motorId], LOW);
+    sendJsonResponse("{\"status\":\"ok\",\"motor_id\":" + String(motorId) + ",\"state\":\"off\"}");
   });
 
   // Motor status
   server.on("/api/motor/status", HTTP_GET, []() {
-      sendCORSHeaders();
-      int motorId = constrain(server.arg("motor_id").toInt(), 0, 8);
-      String s = motorStates[motorId] ? "on" : "off";
-      sendJsonResponse("{\"motor_id\":" + String(motorId) + ",\"motor\":\"" + s + "\",\"led\":\"" + s + "\"}");
+    sendCORSHeaders();
+    int motorId = constrain(server.arg("motor_id").toInt(), 0, 8);
+    String s = motorStates[motorId] ? "on" : "off";
+    sendJsonResponse("{\"motor_id\":" + String(motorId) + ",\"motor\":\"" + s + "\",\"led\":\"" + s + "\"}");
   });
 
   // Moisture data - Reversed mapping: 0V=Dry(0%), 3.3V=Wet(100%)
   server.on("/api/moisture", HTTP_GET, []() {
-      sendCORSHeaders();
-      int sensorId = server.arg("sensor_id").toInt();
-      String json;
+    sendCORSHeaders();
+    int sensorId = server.arg("sensor_id").toInt();
+    String json;
 
-      if (sensorId > 0 && sensorId <= NUM_SENSORS) {
-        int idx = sensorId - 1;
-        json = "{\"sensor_id\":" + String(sensorId) +
-               ",\"value\":" + String(moistureValues[idx]) +
-               ",\"percent\":" + String(moisturePercents[idx]) + "}";
-      } else {
-        json = "{\"main_motor\":{\"value\":" + String(mainMotorMoistureValue) +
-               ",\"percent\":" + String(mainMotorMoisturePercent) + "}";
-        for (int i = 0; i < NUM_SENSORS; i++) {
-          json += ",\"sensor_" + String(i+1) + "\":{\"value\":" +
-                  String(moistureValues[i]) + ",\"percent\":" +
-                  String(moisturePercents[i]) + "}";
-        }
-        json += "}";
+    if (sensorId > 0 && sensorId <= NUM_SENSORS) {
+      int idx = sensorId - 1;
+      json = "{\"sensor_id\":" + String(sensorId) +
+             ",\"value\":" + String(moistureValues[idx]) +
+             ",\"percent\":" + String(moisturePercents[idx]) + "}";
+    } else {
+      json = "{\"main_motor\":{\"value\":" + String(mainMotorMoistureValue) +
+             ",\"percent\":" + String(mainMotorMoisturePercent) + "}";
+      for (int i = 0; i < NUM_SENSORS; i++) {
+        json += ",\"sensor_" + String(i+1) + "\":{\"value\":" +
+                String(moistureValues[i]) + ",\"percent\":" +
+                String(moisturePercents[i]) + "}";
       }
-      sendJsonResponse(json);
+      json += "}";
+    }
+    
+    // Debug output for Flutter app
+    Serial.println("📱 Sending to Flutter: " + json);
+    sendJsonResponse(json);
   });
 
   // System status
   server.on("/api/system/status", HTTP_GET, []() {
-      sendCORSHeaders();
-      int activeMotors = 0;
-      for (int i = 0; i < NUM_MOTORS; i++) {
-        if (motorStates[i]) activeMotors++;
-      }
+    sendCORSHeaders();
+    int activeMotors = 0;
+    for (int i = 0; i < NUM_MOTORS; i++) {
+      if (motorStates[i]) activeMotors++;
+    }
 
-      int avgMoisture = 0;
-      for (int i = 0; i < NUM_SENSORS; i++) avgMoisture += moisturePercents[i];
-      avgMoisture /= NUM_SENSORS;
+    float avgMoisture = 0;
+    for (int i = 0; i < NUM_SENSORS; i++) {
+      avgMoisture += moisturePercents[i];
+      Serial.println("🔍 Sensor " + String(i+1) + " moisture: " + String(moisturePercents[i]) + "%");
+    }
+    Serial.println("🧮 Total moisture sum: " + String(avgMoisture));
+    avgMoisture /= NUM_SENSORS;
+    Serial.println("🧮 Average moisture: " + String(avgMoisture, 1) + "% (divided by " + String(NUM_SENSORS) + " sensors)");
 
-      String json = "{\"status\":\"ok\","
-                    "\"deviceId\":\"device_9668\","
-                    "\"mainMotor\":\"" + String(motorStates[0] ? "on" : "off") + "\","
-                                                                                 "\"mainMotorGpio\":" + String(MOTOR_PINS[0]) + ","
-                                                                                                                                "\"totalMotors\":" + String(NUM_MOTORS) + ","
-                                                                                                                                                                          "\"activeMotors\":" + String(activeMotors) + ","
-                                                                                                                                                                                                                       "\"totalSensors\":" + String(NUM_SENSORS) + ","
-                                                                                                                                                                                                                                                                   "\"avgMoisture\":" + String(avgMoisture) + ","
-                                                                                                                                                                                                                                                                                                              "\"uptime\":" + String(millis()) + ","
-                                                                                                                                                                                                                                                                                                                                                 "\"freeHeap\":" + String(ESP.getFreeHeap()) + ","
-                                                                                                                                                                                                                                                                                                                                                                                               "\"cpuFreq\":" + String(ESP.getCpuFreqMHz()) + ","
-                                                                                                                                                                                                                                                                                                                                                                                                                                              "\"autoMode\":" + String(autoMode ? "true" : "false") + ","
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      "\"alarmEnabled\":" + String(alarmEnabled ? "true" : "false") + ","
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      "\"alarmRunning\":" + String(alarmRunning ? "true" : "false") + ","
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      "\"nextAlarm\":\"" + String(alarmHour) + ":" +
-                    String(alarmMinute < 10 ? "0" : "") + String(alarmMinute) + "\"";
+    String json = "{\"status\":\"ok\","
+      "\"mainMotor\":\"" + String(motorStates[0] ? "on" : "off") + "\","
+      "\"mainMotorGpio\":" + String(MOTOR_PINS[0]) + ","
+      "\"totalMotors\":" + String(NUM_MOTORS) + ","
+      "\"activeMotors\":" + String(activeMotors) + ","
+      "\"totalSensors\":" + String(NUM_SENSORS) + ","
+      "\"avgMoisture\":" + String(avgMoisture) + ","
+      "\"uptime\":" + String(millis()) + ","
+      "\"freeHeap\":" + String(ESP.getFreeHeap()) + ","
+      "\"cpuFreq\":" + String(ESP.getCpuFreqMHz()) + ","
+      "\"autoMode\":" + String(autoMode ? "true" : "false") + ","
+      "\"alarmEnabled\":" + String(alarmEnabled ? "true" : "false") + ","
+      "\"alarmRunning\":" + String(alarmRunning ? "true" : "false") + ","
+      "\"nextAlarm\":\"" + String(alarmHour) + ":" +
+        String(alarmMinute < 10 ? "0" : "") + String(alarmMinute) + "\"";
 
-      if (autoMode) {
-        unsigned long remaining = irrigationDuration - (millis() - irrigationStartTime);
-        json += ",\"autoTimeRemaining\":" + String(remaining / 1000);
-      }
-      if (alarmRunning) {
-        unsigned long remaining = alarmDuration - (millis() - alarmStartMillis);
-        json += ",\"alarmTimeRemaining\":" + String(remaining / 1000);
-      }
+    if (autoMode) {
+      unsigned long remaining = irrigationDuration - (millis() - irrigationStartTime);
+      json += ",\"autoTimeRemaining\":" + String(remaining / 1000);
+    }
+    if (alarmRunning) {
+      unsigned long remaining = alarmDuration - (millis() - alarmStartMillis);
+      json += ",\"alarmTimeRemaining\":" + String(remaining / 1000);
+    }
 
-      json += ",\"activeMotorsList\":[";
-      bool first = true;
-      for (int i = 0; i < NUM_MOTORS; i++) {
-        if (motorStates[i]) {
-          if (!first) json += ",";
-          json += (i == 0) ? "\"main\"" : String(i);
-          first = false;
-        }
+    json += ",\"activeMotorsList\":[";
+    bool first = true;
+    for (int i = 0; i < NUM_MOTORS; i++) {
+      if (motorStates[i]) {
+        if (!first) json += ",";
+        json += (i == 0) ? "\"main\"" : String(i);
+        first = false;
       }
-      json += "],\"alarmMotors\":[";
-      first = true;
-      for (int i = 0; i < NUM_MOTORS; i++) {
-        if (alarmSelectedMotors[i]) {
-          if (!first) json += ",";
-          json += (i == 0) ? "\"main\"" : String(i);
-          first = false;
-        }
+    }
+    json += "],\"alarmMotors\":[";
+    first = true;
+    for (int i = 0; i < NUM_MOTORS; i++) {
+      if (alarmSelectedMotors[i]) {
+        if (!first) json += ",";
+        json += (i == 0) ? "\"main\"" : String(i);
+        first = false;
       }
-      json += "]}";
-      sendJsonResponse(json);
+    }
+    json += "]}";
+    sendJsonResponse(json);
   });
 
   // Auto start
   server.on("/api/auto/start", HTTP_ANY, []() {
-      sendCORSHeaders();
-      if (server.method() == HTTP_OPTIONS) { server.send(200, "text/plain", ""); return; }
+    sendCORSHeaders();
+    if (server.method() == HTTP_OPTIONS) { server.send(200, "text/plain", ""); return; }
 
+    String body = server.arg("plain");
+    int duration = 25;
+    bool motorSelection[NUM_MOTORS] = {false};
+    for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = true; // default all
+
+    int durationIndex = body.indexOf("\"duration\":");
+    if (durationIndex > 0) {
+      int s = durationIndex + 11;
+      int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
+      duration = body.substring(s, e).toInt();
+      if (duration <= 0) duration = 25;
+    }
+
+    int motorsIndex = body.indexOf("\"motors\":");
+    if (motorsIndex > 0) {
+      int s = body.indexOf("[", motorsIndex);
+      int e = body.indexOf("]", s);
+      if (e > s) {
+        String motorsStr = body.substring(s + 1, e);
+        motorsStr.replace(" ", ""); motorsStr.replace("\n", "");
+        for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = false;
+        int pos = 0;
+        while (pos < (int)motorsStr.length()) {
+          int comma = motorsStr.indexOf(",", pos);
+          if (comma < 0) comma = motorsStr.length();
+          int motorId = motorsStr.substring(pos, comma).toInt();
+          if (motorId >= 1 && motorId <= NUM_MOTORS) motorSelection[motorId - 1] = true;
+          pos = comma + 1;
+        }
+      }
+    }
+
+    startIrrigation((unsigned long)duration * 60 * 1000, motorSelection, true);
+
+    String response = "{\"status\":\"ok\",\"autoMode\":true,\"duration\":" + String(duration) + ",\"motors\":[";
+    bool first = true;
+    for (int i = 0; i < NUM_MOTORS; i++) {
+      if (motorSelection[i]) {
+        if (!first) response += ",";
+        response += String(i+1);
+        first = false;
+      }
+    }
+    response += "]}";
+    sendJsonResponse(response);
+    Serial.println("🤖 Auto Mode Started: " + String(duration) + " minutes");
+  });
+
+  // Auto stop
+  server.on("/api/auto/stop", HTTP_ANY, []() {
+    sendCORSHeaders();
+    if (server.method() == HTTP_OPTIONS) { server.send(200, "text/plain", ""); return; }
+    stopAllMotors();
+    sendJsonResponse("{\"status\":\"ok\",\"autoMode\":false}");
+  });
+
+  // All ON
+  server.on("/api/all/on", HTTP_ANY, []() {
+    sendCORSHeaders();
+    if (server.method() == HTTP_OPTIONS) { server.send(200, "text/plain", ""); return; }
+    turnAllMotorsOn();
+    sendJsonResponse("{\"status\":\"ok\",\"action\":\"all_on\"}");
+  });
+
+  // All OFF
+  server.on("/api/all/off", HTTP_ANY, []() {
+    sendCORSHeaders();
+    if (server.method() == HTTP_OPTIONS) { server.send(200, "text/plain", ""); return; }
+    turnAllMotorsOff();
+    sendJsonResponse("{\"status\":\"ok\",\"action\":\"all_off\"}");
+  });
+
+  // Alarm set - HTTP_ANY for CORS and browser testing
+  server.on("/api/alarm/set", HTTP_ANY, []() {
+    sendCORSHeaders();
+    if (server.method() == HTTP_OPTIONS) { 
+      server.send(200, "text/plain", ""); 
+      return; 
+    }
+
+    int hour = 0, minute = 0, duration = 25;
+    bool motorSelection[NUM_MOTORS];
+    for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = true;
+
+    if (server.method() == HTTP_POST) {
+      // Handle POST with JSON body (existing logic)
       String body = server.arg("plain");
-      int duration = 25;
-      bool motorSelection[NUM_MOTORS] = {false};
-      for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = true; // default all
-
+      
+      int hourIndex = body.indexOf("\"hour\":");
+      if (hourIndex > 0) {
+        int s = hourIndex + 7; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
+        hour = constrain(body.substring(s, e).toInt(), 0, 23);
+      }
+      int minuteIndex = body.indexOf("\"minute\":");
+      if (minuteIndex > 0) {
+        int s = minuteIndex + 9; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
+        minute = constrain(body.substring(s, e).toInt(), 0, 59);
+      }
       int durationIndex = body.indexOf("\"duration\":");
       if (durationIndex > 0) {
-        int s = durationIndex + 11;
-        int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
+        int s = durationIndex + 11; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
         duration = body.substring(s, e).toInt();
         if (duration <= 0) duration = 25;
       }
 
       int motorsIndex = body.indexOf("\"motors\":");
       if (motorsIndex > 0) {
-        int s = body.indexOf("[", motorsIndex);
-        int e = body.indexOf("]", s);
+        int s = body.indexOf("[", motorsIndex); int e = body.indexOf("]", s);
         if (e > s) {
           String motorsStr = body.substring(s + 1, e);
           motorsStr.replace(" ", ""); motorsStr.replace("\n", "");
           for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = false;
           int pos = 0;
           while (pos < (int)motorsStr.length()) {
-            int comma = motorsStr.indexOf(",", pos);
-            if (comma < 0) comma = motorsStr.length();
+            int comma = motorsStr.indexOf(",", pos); if (comma < 0) comma = motorsStr.length();
             int motorId = motorsStr.substring(pos, comma).toInt();
             if (motorId >= 1 && motorId <= NUM_MOTORS) motorSelection[motorId - 1] = true;
             pos = comma + 1;
           }
         }
       }
-
-      startIrrigation((unsigned long)duration * 60 * 1000, motorSelection, true);
-
-      String response = "{\"status\":\"ok\",\"autoMode\":true,\"duration\":" + String(duration) + ",\"motors\":[";
-      bool first = true;
-      for (int i = 0; i < NUM_MOTORS; i++) {
-        if (motorSelection[i]) {
-          if (!first) response += ",";
-          response += String(i+1);
-          first = false;
-        }
-      }
-      response += "]}";
-      sendJsonResponse(response);
-      Serial.println("🤖 Auto Mode Started: " + String(duration) + " minutes");
-  });
-
-  // Auto stop
-  server.on("/api/auto/stop", HTTP_ANY, []() {
-      sendCORSHeaders();
-      if (server.method() == HTTP_OPTIONS) { server.send(200, "text/plain", ""); return; }
-      stopAllMotors();
-      sendJsonResponse("{\"status\":\"ok\",\"autoMode\":false}");
-  });
-
-  // All ON
-  server.on("/api/all/on", HTTP_ANY, []() {
-      sendCORSHeaders();
-      if (server.method() == HTTP_OPTIONS) { server.send(200, "text/plain", ""); return; }
-      turnAllMotorsOn();
-      sendJsonResponse("{\"status\":\"ok\",\"action\":\"all_on\"}");
-  });
-
-  // All OFF
-  server.on("/api/all/off", HTTP_ANY, []() {
-      sendCORSHeaders();
-      if (server.method() == HTTP_OPTIONS) { server.send(200, "text/plain", ""); return; }
-      turnAllMotorsOff();
-      sendJsonResponse("{\"status\":\"ok\",\"action\":\"all_off\"}");
-  });
-
-  // Alarm set - HTTP_ANY for CORS and browser testing
-  server.on("/api/alarm/set", HTTP_ANY, []() {
-      sendCORSHeaders();
-      if (server.method() == HTTP_OPTIONS) {
-        server.send(200, "text/plain", "");
-        return;
-      }
-
-      int hour = 0, minute = 0, duration = 25;
-      bool motorSelection[NUM_MOTORS];
-      for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = true;
-
-      if (server.method() == HTTP_POST) {
-        // Handle POST with JSON body (existing logic)
-        String body = server.arg("plain");
-
-        int hourIndex = body.indexOf("\"hour\":");
-        if (hourIndex > 0) {
-          int s = hourIndex + 7; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
-          hour = constrain(body.substring(s, e).toInt(), 0, 23);
-        }
-        int minuteIndex = body.indexOf("\"minute\":");
-        if (minuteIndex > 0) {
-          int s = minuteIndex + 9; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
-          minute = constrain(body.substring(s, e).toInt(), 0, 59);
-        }
-        int durationIndex = body.indexOf("\"duration\":");
-        if (durationIndex > 0) {
-          int s = durationIndex + 11; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
-          duration = body.substring(s, e).toInt();
-          if (duration <= 0) duration = 25;
-        }
-
-        int motorsIndex = body.indexOf("\"motors\":");
-        if (motorsIndex > 0) {
-          int s = body.indexOf("[", motorsIndex); int e = body.indexOf("]", s);
-          if (e > s) {
-            String motorsStr = body.substring(s + 1, e);
-            motorsStr.replace(" ", ""); motorsStr.replace("\n", "");
-            for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = false;
-            int pos = 0;
-            while (pos < (int)motorsStr.length()) {
-              int comma = motorsStr.indexOf(",", pos); if (comma < 0) comma = motorsStr.length();
-              int motorId = motorsStr.substring(pos, comma).toInt();
-              if (motorId >= 1 && motorId <= NUM_MOTORS) motorSelection[motorId - 1] = true;
-              pos = comma + 1;
-            }
-          }
-        }
-      } else if (server.method() == HTTP_GET) {
-        // Handle GET with query params for browser testing
-        hour = constrain(server.arg("hour").toInt(), 0, 23);
-        minute = constrain(server.arg("minute").toInt(), 0, 59);
-        duration = server.arg("duration").toInt();
-        if (duration <= 0) duration = 25;
-
-        String motors = server.arg("motors");
-        if (motors.length() > 0) {
-          for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = false;
-          int motorNum = 0;
-          int start = 0;
-          for (int i = 0; i <= motors.length(); i++) {
-            if (i == motors.length() || motors.charAt(i) == ',') {
-              if (i > start) {
-                motorNum = motors.substring(start, i).toInt();
-                if (motorNum >= 1 && motorNum <= NUM_MOTORS) {
-                  motorSelection[motorNum - 1] = true;
-                }
+    } else if (server.method() == HTTP_GET) {
+      // Handle GET with query params for browser testing
+      hour = constrain(server.arg("hour").toInt(), 0, 23);
+      minute = constrain(server.arg("minute").toInt(), 0, 59);
+      duration = server.arg("duration").toInt();
+      if (duration <= 0) duration = 25;
+      
+      String motors = server.arg("motors");
+      if (motors.length() > 0) {
+        for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = false;
+        int motorNum = 0;
+        int start = 0;
+        for (int i = 0; i <= motors.length(); i++) {
+          if (i == motors.length() || motors.charAt(i) == ',') {
+            if (i > start) {
+              motorNum = motors.substring(start, i).toInt();
+              if (motorNum >= 1 && motorNum <= NUM_MOTORS) {
+                motorSelection[motorNum - 1] = true;
               }
-              start = i + 1;
             }
+            start = i + 1;
           }
         }
       }
+    }
 
-      alarmHour = hour; alarmMinute = minute;
-      alarmDuration = (unsigned long)duration * 60 * 1000;
-      alarmEnabled = true; alarmRunning = false; lastAlarmTriggerDay = -1;
-      for (int i = 0; i < NUM_MOTORS; i++) alarmSelectedMotors[i] = motorSelection[i];
+    alarmHour = hour; alarmMinute = minute;
+    alarmDuration = (unsigned long)duration * 60 * 1000;
+    alarmEnabled = true; alarmRunning = false; lastAlarmTriggerDay = -1;
+    for (int i = 0; i < NUM_MOTORS; i++) alarmSelectedMotors[i] = motorSelection[i];
 
-      String response = "{\"status\":\"ok\",\"alarm\":\"set\",\"hour\":" + String(hour) +
-                        ",\"minute\":" + String(minute) + ",\"duration\":" + String(duration) + ",\"motors\":[";
-      bool first = true;
-      for (int i = 0; i < NUM_MOTORS; i++) {
-        if (motorSelection[i]) {
-          if (!first) response += ",";
-          response += String(i+1); first = false;
-        }
+    String response = "{\"status\":\"ok\",\"alarm\":\"set\",\"hour\":" + String(hour) +
+      ",\"minute\":" + String(minute) + ",\"duration\":" + String(duration) + ",\"motors\":[";
+    bool first = true;
+    for (int i = 0; i < NUM_MOTORS; i++) {
+      if (motorSelection[i]) {
+        if (!first) response += ",";
+        response += String(i+1); first = false;
       }
-      response += "]}";
-      sendJsonResponse(response);
-      Serial.println("⏰ Alarm Set: " + String(hour) + ":" + String(minute) + " for " + String(duration) + " minutes");
+    }
+    response += "]}";
+    sendJsonResponse(response);
+    Serial.println("⏰ Alarm Set: " + String(hour) + ":" + String(minute) + " for " + String(duration) + " minutes");
   });
 
   // Alarm stop - HTTP_ANY for CORS support
   server.on("/api/alarm/stop", HTTP_ANY, []() {
-      sendCORSHeaders();
-      if (server.method() == HTTP_OPTIONS) {
-        server.send(200, "text/plain", "");
-        return;
-      }
-
-      stopAlarmIrrigation();
-      sendJsonResponse("{\"status\":\"ok\",\"alarm\":\"stopped\"}");
-      Serial.println("⏰ Alarm Stopped");
+    sendCORSHeaders();
+    if (server.method() == HTTP_OPTIONS) { 
+      server.send(200, "text/plain", ""); 
+      return; 
+    }
+    
+    stopAlarmIrrigation();
+    sendJsonResponse("{\"status\":\"ok\",\"alarm\":\"stopped\"}");
+    Serial.println("⏰ Alarm Stopped");
   });
 
   // Alarm status - GET endpoint for current alarm state
   server.on("/api/alarm/status", HTTP_GET, []() {
-      sendCORSHeaders();
-
-      String json = "{\"status\":\"ok\",";
-      json += "\"alarmEnabled\":" + String(alarmEnabled ? "true" : "false") + ",";
-      json += "\"alarmRunning\":" + String(alarmRunning ? "true" : "false") + ",";
-      json += "\"alarmHour\":" + String(alarmHour) + ",";
-      json += "\"alarmMinute\":" + String(alarmMinute) + ",";
-      json += "\"alarmDuration\":" + String(alarmDuration / 60000) + ",";
-      json += "\"alarmTimeRemaining\":" + String(alarmRunning ? (alarmDuration - (millis() - alarmStartMillis)) / 1000 : 0) + ",";
-      json += "\"alarmSelectedMotors\":[";
-
-      bool first = true;
-      for (int i = 0; i < NUM_MOTORS; i++) {
-        if (alarmSelectedMotors[i]) {
-          if (!first) json += ",";
-          json += String(i);
-          first = false;
-        }
+    sendCORSHeaders();
+    
+    String json = "{\"status\":\"ok\",";
+    json += "\"alarmEnabled\":" + String(alarmEnabled ? "true" : "false") + ",";
+    json += "\"alarmRunning\":" + String(alarmRunning ? "true" : "false") + ",";
+    json += "\"alarmHour\":" + String(alarmHour) + ",";
+    json += "\"alarmMinute\":" + String(alarmMinute) + ",";
+    json += "\"alarmDuration\":" + String(alarmDuration / 60000) + ",";
+    json += "\"alarmTimeRemaining\":" + String(alarmRunning ? (alarmDuration - (millis() - alarmStartMillis)) / 1000 : 0) + ",";
+    json += "\"alarmSelectedMotors\":[";
+    
+    bool first = true;
+    for (int i = 0; i < NUM_MOTORS; i++) {
+      if (alarmSelectedMotors[i]) {
+        if (!first) json += ",";
+        json += String(i);
+        first = false;
       }
-      json += "]}";
-
-      sendJsonResponse(json);
+    }
+    json += "]}";
+    
+    sendJsonResponse(json);
   });
 
-
+  
   // GET motor settings
   server.on("/api/motor/settings", HTTP_GET, []() {
-      sendCORSHeaders();
-      int motorId = server.arg("motor_id").toInt();
-      motorId = constrain(motorId, 0, 8);
-
-      String json = "{\"motor_id\":" + String(motorId) +
-                    ",\"plant_name\":\"" + motorPlantNames[motorId] + "\"" +
-                    ",\"moisture_threshold\":" + String(motorMoistureThreshold[motorId]) +
-                    ",\"duration\":" + String(motorRunDuration[motorId]) +
-                    ",\"auto_enabled\":" + String(motorAutoEnabled[motorId] ? "true" : "false") +
-                    ",\"gpio\":" + String(MOTOR_PINS[motorId]) + "}";
-
-      sendJsonResponse(json);
+    sendCORSHeaders();
+    int motorId = server.arg("motor_id").toInt();
+    motorId = constrain(motorId, 0, 8);
+    
+    String json = "{\"motor_id\":" + String(motorId) +
+      ",\"plant_name\":\"" + motorPlantNames[motorId] + "\"" +
+      ",\"moisture_threshold\":" + String(motorMoistureThreshold[motorId]) +
+      ",\"duration\":" + String(motorRunDuration[motorId]) +
+      ",\"auto_enabled\":" + String(motorAutoEnabled[motorId] ? "true" : "false") +
+      ",\"gpio\":" + String(MOTOR_PINS[motorId]) + "}";
+    
+    sendJsonResponse(json);
   });
 
   // POST motor settings
   server.on("/api/motor/settings", HTTP_POST, []() {
-      sendCORSHeaders();
-      String body = server.arg("plain");
+    sendCORSHeaders();
+    String body = server.arg("plain");
 
-      int motorId = 0;
-      int idIndex = body.indexOf("\"motor_id\":");
-      if (idIndex > 0) {
-        int s = idIndex + 11; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
-        motorId = constrain(body.substring(s, e).toInt(), 0, 8);
-      }
+    int motorId = 0;
+    int idIndex = body.indexOf("\"motor_id\":");
+    if (idIndex > 0) {
+      int s = idIndex + 11; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
+      motorId = constrain(body.substring(s, e).toInt(), 0, 8);
+    }
 
-      int nameIndex = body.indexOf("\"plant_name\":\"");
-      if (nameIndex > 0) {
-        int s = nameIndex + 14; int e = body.indexOf("\"", s);
-        if (e > s) motorPlantNames[motorId] = body.substring(s, e);
-      }
+    int nameIndex = body.indexOf("\"plant_name\":\"");
+    if (nameIndex > 0) {
+      int s = nameIndex + 14; int e = body.indexOf("\"", s);
+      if (e > s) motorPlantNames[motorId] = body.substring(s, e);
+    }
 
-      int threshIndex = body.indexOf("\"moisture_threshold\":");
-      if (threshIndex > 0) {
-        int s = threshIndex + 21; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
-        motorMoistureThreshold[motorId] = constrain(body.substring(s, e).toInt(), 0, 100);
-      }
+    int threshIndex = body.indexOf("\"moisture_threshold\":");
+    if (threshIndex > 0) {
+      int s = threshIndex + 21; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
+      motorMoistureThreshold[motorId] = constrain(body.substring(s, e).toInt(), 0, 100);
+    }
 
-      int durIndex = body.indexOf("\"duration\":");
-      if (durIndex > 0) {
-        int s = durIndex + 11; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
-        motorRunDuration[motorId] = constrain(body.substring(s, e).toInt(), 1, 120);
-      }
+    int durIndex = body.indexOf("\"duration\":");
+    if (durIndex > 0) {
+      int s = durIndex + 11; int e = body.indexOf(",", s); if (e < 0) e = body.indexOf("}", s);
+      motorRunDuration[motorId] = constrain(body.substring(s, e).toInt(), 1, 120);
+    }
 
-      int autoIndex = body.indexOf("\"auto_enabled\":");
-      if (autoIndex > 0) {
-        motorAutoEnabled[motorId] = body.substring(autoIndex + 15, autoIndex + 20).indexOf("true") >= 0;
-      }
+    int autoIndex = body.indexOf("\"auto_enabled\":");
+    if (autoIndex > 0) {
+      motorAutoEnabled[motorId] = body.substring(autoIndex + 15, autoIndex + 20).indexOf("true") >= 0;
+    }
 
-      saveMotorSettings(motorId);
+    saveMotorSettings(motorId);
 
-      sendJsonResponse("{\"status\":\"ok\",\"motor_id\":" + String(motorId) +
-                       ",\"plant_name\":\"" + motorPlantNames[motorId] + "\"" +
-                       ",\"moisture_threshold\":" + String(motorMoistureThreshold[motorId]) +
-                       ",\"duration\":" + String(motorRunDuration[motorId]) +
-                       ",\"auto_enabled\":" + String(motorAutoEnabled[motorId] ? "true" : "false") + "}");
+    sendJsonResponse("{\"status\":\"ok\",\"motor_id\":" + String(motorId) +
+      ",\"plant_name\":\"" + motorPlantNames[motorId] + "\"" +
+      ",\"moisture_threshold\":" + String(motorMoistureThreshold[motorId]) +
+      ",\"duration\":" + String(motorRunDuration[motorId]) +
+      ",\"auto_enabled\":" + String(motorAutoEnabled[motorId] ? "true" : "false") + "}");
 
-      Serial.println("⚙️ Motor " + String(motorId) + " settings updated | Plant: " +
-                     motorPlantNames[motorId] + " | Threshold: " + String(motorMoistureThreshold[motorId]) +
-                     "% | Duration: " + String(motorRunDuration[motorId]) + "min");
+    Serial.println("⚙️ Motor " + String(motorId) + " settings updated | Plant: " +
+      motorPlantNames[motorId] + " | Threshold: " + String(motorMoistureThreshold[motorId]) +
+      "% | Duration: " + String(motorRunDuration[motorId]) + "min");
   });
 
   // Test / debug page
   // BUG FIX: controlMotor() in the JS was calling /api/motor/on for both ON and OFF actions.
   // Fixed to call the correct endpoint based on the action parameter.
   server.on("/test", HTTP_GET, []() {
-      sendCORSHeaders();
-      String html = R"rawhtml(
+    sendCORSHeaders();
+    String html = R"rawhtml(
 <!DOCTYPE html><html><head><title>ESP32 Irrigation Test</title>
 <meta name='viewport' content='width=device-width, initial-scale=1'>
 <style>
@@ -1213,49 +1214,56 @@ function controlMotor(id,action){
     .then(r=>r.json()).then(d=>{motorStates[id]=action==='on';renderMotorGrid();showStatus('Motor '+id+' '+action,'success')})
     .catch(e=>showStatus('Error: '+e.message,'error'));
 }
-
-function renderMotorGrid(){
-  const g=document.getElementById('motorGrid');
-  if(!g) return;
-  g.innerHTML='';
-  for(let i=1;i<9;i++){
-    const state=motorStates[i]?'on':'off';
-    g.innerHTML+=`<div class='motor-card ${state}'><h3>Motor ${i}</h3>
-<button class='btn' onclick='controlMotor(${i},"on")'>ON</button>
-<button class='btn btn-danger' onclick='controlMotor(${i},"off")'>OFF</button></div>`;
-  }
-}
-
 function startAuto(){
-  const dur=document.getElementById('duration').value || 25;
-  fetch('/api/auto/start',{method:'POST',body:JSON.stringify({duration:dur})})
-  .then(r=>r.json()).then(d=>showStatus('Auto started','success')).catch(e=>showStatus('Error','error'));
+  let duration=document.getElementById('duration').value||25;
+  fetch('/api/auto/start',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({duration:parseInt(duration),motors:[1,2,3,4,5,6,7,8]})})
+    .then(r=>r.json()).then(d=>{updateUI();showStatus('Auto mode started for '+duration+' minutes','success')})
+    .catch(e=>showStatus('Error: '+e.message,'error'));
 }
-
 function stopAuto(){
-  fetch('/api/auto/stop',{method:'POST'})
-  .then(r=>r.json()).then(d=>showStatus('Auto stopped','success')).catch(e=>showStatus('Error','error'));
+  fetch('/api/auto/stop',{method:'POST'}).then(r=>r.json())
+    .then(d=>{updateUI();showStatus('Auto mode stopped','success')})
+    .catch(e=>showStatus('Error: '+e.message,'error'));
 }
-
+function renderMotorGrid(){
+  let grid='';
+  for(let i=1;i<=8;i++){
+    let on=motorStates[i]||false;
+    grid+='<div class="motor-card '+(on?'on':'off')+'">'
+      +'<h3>Motor '+i+'</h3><p>'+(on?'🔴 ON':'⚫ OFF')+'</p>'
+      +'<button class="btn" onclick="controlMotor('+i+',\'on\')">ON</button>'
+      +'<button class="btn btn-danger" onclick="controlMotor('+i+',\'off\')">OFF</button>'
+      +'</div>';
+  }
+  document.getElementById('motorGrid').innerHTML=grid;
+}
+function updateUI(){
+  fetch('/api/system/status').then(r=>r.json()).then(d=>{
+    let mode=d.autoMode?'🤖 AUTO':'👤 MANUAL';
+    document.getElementById('status').innerHTML='Mode: '+mode
+      +' | Main Motor: '+(d.mainMotor=='on'?'🔴 ON':'⚫ OFF')
+      +(d.autoTimeRemaining?' | Time: '+d.autoTimeRemaining+'s':'');
+    renderMotorGrid();
+  }).catch(e=>showStatus('Error updating UI','error'));
+}
 function loadSensors(){
   fetch('/api/moisture').then(r=>r.json()).then(d=>{
-    let h='<p>Main Motor: '+d.main_motor.percent+'%</p>';
-    for(let i=1;i<9;i++){
-        if(d['sensor_'+i]) h+='<p>Sensor '+i+': '+d['sensor_'+i].percent+'%</p>';
-    }
-    document.getElementById('sensorData').innerHTML=h;
-  }).catch(e=>showStatus('Error','error'));
+    let html='<h3>Main Motor Moisture: '+d.main_motor.percent+'%</h3>';
+    for(let i=1;i<=8;i++){html+='<p>Sensor '+i+': '+d['sensor_'+i].percent+'%</p>';}
+    document.getElementById('sensorData').innerHTML=html;
+  }).catch(e=>showStatus('Error loading sensors','error'));
 }
-
-function updateUI(){
-  renderMotorGrid();
-}
-
 function loadSystem(){
   fetch('/api/system/status').then(r=>r.json()).then(d=>{
-    let h='<p>Active Motors: '+d.activeMotors+' / '+d.totalMotors+'</p>';
-    document.getElementById('systemData').innerHTML=h+(d.autoMode?
-'<p>⏱️ Auto Time Remaining: '+d.autoTimeRemaining+'s</p>':'');
+    document.getElementById('systemData').innerHTML=
+      '<p>WiFi: '+d.status+'</p>'
+      +'<p>Mode: '+(d.autoMode?'Auto':'Manual')+'</p>'
+      +'<p>Active Motors: '+d.activeMotors+'/'+d.totalMotors+'</p>'
+      +'<p>Avg Moisture: '+d.avgMoisture+'%</p>'
+      +'<p>Uptime: '+(d.uptime/1000).toFixed(1)+'s</p>'
+      +'<p>Free Heap: '+d.freeHeap+' bytes</p>'
+      +(d.autoTimeRemaining?'<p>⏱️ Auto Time Remaining: '+d.autoTimeRemaining+'s</p>':'');
   }).catch(e=>showStatus('Error loading system','error'));
 }
 function showStatus(msg,type){
@@ -1266,86 +1274,114 @@ function showStatus(msg,type){
 updateUI(); loadSensors(); loadSystem();
 </script></body></html>
 )rawhtml";
-      server.send(200, "text/html", html);
+    server.send(200, "text/html", html);
   });
 }
-// --- Firebase: Initialize ---------------------------------------------------
-void initializeFirebase() {
-  fbConfig.host = FIREBASE_HOST;
-  fbConfig.signer.tokens.legacy_token = FIREBASE_AUTH;
 
-  Firebase.begin(&fbConfig, &fbAuth);
-  Firebase.reconnectWiFi(true);
-
-  // Set up Firebase Stream to listen for motor control changes
-  if (!Firebase.RTDB.beginStream(&streamData, "/devices/" DEVICE_ID)) {
-    Serial.printf("Firebase stream begin error: %s\n", streamData.errorReason().c_str());
-  } else {
-    Firebase.RTDB.setStreamCallback(&streamData, streamCallback, streamTimeoutCallback);
-    Serial.print("📡 Firebase Stream initialized for ID: ");
-    Serial.println(DEVICE_ID);
-    
-    // Set status to "on"
-    // Note: onDisconnect() is not supported by Firebase_ESP_Client via REST API. 
-    // Presence is handled via the "lastSeen" heartbeat in updateFirebaseStatus().
-    String statusPath = "/devices/" + String(DEVICE_ID) + "/status";
-    Firebase.RTDB.setString(&fbdo, statusPath.c_str(), "on");
-    
-    firebaseInitialized = true;
-  }
-}
-
-// --- Firebase: Periodic Update ----------------------------------------------
-void updateFirebaseStatus() {
-  if (!firebaseInitialized || !Firebase.ready()) return;
-
-  if (millis() - lastFirebaseUpdate >= FIREBASE_UPDATE_INTERVAL) {
-    lastFirebaseUpdate = millis();
-
-    FirebaseJson status;
-    status.set("ip", WiFi.localIP().toString());
-    status.set("lastSeen", (int)time(NULL));
-    status.set("mainMotorMoisture", mainMotorMoisturePercent);
-    status.set("status", "on"); // Always "on" while we are running and connected
-    
-    FirebaseJson moisture;
-    for (int i = 0; i < NUM_SENSORS; i++) {
-        moisture.set("sensor_" + String(i + 1), moisturePercents[i]);
-    }
-    status.set("moisture", moisture);
-
-    if (Firebase.RTDB.updateNode(&fbdo, "/devices/" DEVICE_ID, &status)) {
-      Serial.println("📡 Firebase status updated");
-    } else {
-      Serial.printf("Firebase update error: %s\n", fbdo.errorReason().c_str());
-    }
-  }
-}
-
-// --- Firebase: Stream Callback ---------------------------------------------
-void streamCallback(FirebaseStream data) {
-  Serial.printf("📡 Stream update: %s %s %s\n", data.streamPath().c_str(), data.dataPath().c_str(), data.payload().c_str());
+// ─── BLE Implementation ────────────────────────────────────────────────────────
+void initBLE() {
+  NimBLEDevice::init("ESP32_Irrigation");
   
-  // If the update is specifically for a motor
-  if (data.dataPath().startsWith("/motors/")) {
-    int motorIdx = data.dataPath().substring(8).toInt();
-    if (motorIdx >= 0 && motorIdx < NUM_MOTORS) {
-      bool newState = (data.payload() == "true");
-      if (motorStates[motorIdx] != newState) {
-        motorStates[motorIdx] = newState;
-        digitalWrite(MOTOR_PINS[motorIdx], newState ? HIGH : LOW);
-        Serial.printf("📡 Firebase set Motor %d to %s\n", motorIdx, newState ? "ON" : "OFF");
+  // Create BLE Server
+  pBLEServer = NimBLEDevice::createServer();
+  
+  // Create BLE Service
+  NimBLEService* pService = pBLEServer->createService(BLE_SERVICE_UUID);
+  
+  // Create BLE Characteristics
+  pTelemetryChar = pService->createCharacteristic(
+    BLE_TELE_CHAR_UUID,
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
+  );
+  
+  pSystemChar = pService->createCharacteristic(
+    BLE_SYS_CHAR_UUID,
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
+  );
+  
+  NimBLECharacteristic* pControlChar = pService->createCharacteristic(
+    BLE_CTRL_CHAR_UUID,
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE
+  );
+  
+  // Set up control characteristic callback
+  pControlChar->setCallbacks(new class : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* pCharacteristic) {
+      String value = pCharacteristic->getValue().c_str();
+      Serial.println("🔵 BLE Command received: " + value);
+      
+      // Process BLE commands (same as HTTP API)
+      if (value == "AUTO_ON") {
+        startIrrigation(25 * 60 * 1000, selectedMotors, true);
+      } else if (value == "AUTO_OFF") {
+        stopAllMotors();
+      } else if (value.startsWith("MOTOR_")) {
+        int motorId = value.substring(6).toInt();
+        if (motorId >= 0 && motorId < NUM_MOTORS) {
+          motorStates[motorId] = !motorStates[motorId];
+          digitalWrite(MOTOR_PINS[motorId], motorStates[motorId] ? HIGH : LOW);
+          Serial.println("🔵 BLE Motor " + String(motorId) + " " + (motorStates[motorId] ? "ON" : "OFF"));
+        }
       }
     }
-  }
+  });
   
-  // If the update is for "stopAll"
-  if (data.dataPath() == "/stopAll" && data.payload() == "true") {
-    stopAllMotors();
-    Firebase.RTDB.setBool(&fbdo, "/devices/" DEVICE_ID "/stopAll", false);
-  }
+  // Start the service
+  pService->start();
+  
+  // Start advertising
+  NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(BLE_SERVICE_UUID);
+  pAdvertising->setScanResponse(false);
+  pAdvertising->setMinPreferred(0);  // set value to 0x00 to not advertise this parameter
+  NimBLEDevice::startAdvertising();
+  
+  bleInitialized = true;
+  Serial.println("🔵 BLE initialized and advertising");
 }
 
-void streamTimeoutCallback(bool timeout) {
-  if (timeout) Serial.println("📡 Firebase Stream timeout");
+void handleBLENotifications() {
+  if (!bleInitialized || millis() - lastBLENotify < BLE_NOTIFY_INTERVAL) {
+    return;
+  }
+  
+  lastBLENotify = millis();
+  
+  // Create telemetry JSON
+  String telemetry = "{";
+  telemetry += "\"uptime\":" + String(millis()) + ",";
+  telemetry += "\"main_motor\":" + String(mainMotorMoisturePercent) + ",";
+  telemetry += "\"sensors\":[";
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    telemetry += String(moisturePercents[i]);
+    if (i < NUM_SENSORS - 1) telemetry += ",";
+  }
+  telemetry += "],";
+  telemetry += "\"motors\":[";
+  for (int i = 0; i < NUM_MOTORS; i++) {
+    telemetry += (motorStates[i] ? "1" : "0");
+    if (i < NUM_MOTORS - 1) telemetry += ",";
+  }
+  telemetry += "]}";
+  
+  // Send telemetry notification
+  if (pTelemetryChar) {
+    pTelemetryChar->setValue(telemetry.c_str());
+    pTelemetryChar->notify();
+  }
+  
+  // Create system status JSON
+  String systemStatus = "{";
+  systemStatus += "\"autoMode\":" + String(autoMode ? "true" : "false") + ",";
+  systemStatus += "\"alarmEnabled\":" + String(alarmEnabled ? "true" : "false") + ",";
+  systemStatus += "\"alarmRunning\":" + String(alarmRunning ? "true" : "false") + ",";
+  systemStatus += "\"freeHeap\":" + String(ESP.getFreeHeap()) + ",";
+  systemStatus += "\"wifiRSSI\":" + String(WiFi.RSSI());
+  systemStatus += "}";
+  
+  // Send system status notification
+  if (pSystemChar) {
+    pSystemChar->setValue(systemStatus.c_str());
+    pSystemChar->notify();
+  }
 }

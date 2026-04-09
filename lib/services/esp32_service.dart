@@ -24,35 +24,39 @@ class Esp32Service {
     if (ip == null || ip.isEmpty) return null;
 
     try {
-      final response = await http.get(Uri.parse("http://$ip:$port/api/system/status"))
+      final response = await http
+          .get(Uri.parse("http://$ip:$port/api/system/status"))
           .timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
     } catch (_) {}
-    
+
     // Fallback: Check Firebase for "lastSeen" or status if local fails
     if (deviceId != null && deviceId.isNotEmpty) {
-       final snapshot = await _db.ref("devices/$deviceId").get();
-       if (snapshot.exists) {
-         final data = Map<String, dynamic>.from(snapshot.value as Map);
-         
-         int lastSeen = data["lastSeen"] ?? 0;
-         int currentTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-         bool isOffline = (currentTime - lastSeen) > 60;
-         
-         // Transform Firebase data to match ESP32 endpoint format briefly
-         return {
-           "status": isOffline ? "offline" : "ok",
-           "remote": true,
-           "deviceId": deviceId,
-           "lastSeen": lastSeen,
-           "mainMotor": data["motors"]?["0"] == true ? "on" : "off",
-           "activeMotorsList": (data["motors"] as Map?)?.entries
-               .where((e) => e.value == true)
-               .map((e) => e.key).toList() ?? [],
-         };
-       }
+      final snapshot = await _db.ref("devices/$deviceId").get();
+      if (snapshot.exists) {
+        final data = Map<String, dynamic>.from(snapshot.value as Map);
+
+        int lastSeen = data["lastSeen"] ?? 0;
+        int currentTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        bool isOffline = (currentTime - lastSeen) > 60;
+
+        // Transform Firebase data to match ESP32 endpoint format briefly
+        return {
+          "status": isOffline ? "offline" : "ok",
+          "remote": true,
+          "deviceId": deviceId,
+          "lastSeen": lastSeen,
+          "mainMotor": data["motors"]?["0"] == true ? "on" : "off",
+          "activeMotorsList":
+              (data["motors"] as Map?)?.entries
+                  .where((e) => e.value == true)
+                  .map((e) => e.key)
+                  .toList() ??
+              [],
+        };
+      }
     }
     return null;
   }
@@ -74,7 +78,8 @@ class Esp32Service {
 
     if (ip != null && ip.isNotEmpty) {
       try {
-        final response = await http.get(Uri.parse("http://$ip:$port/api/moisture"))
+        final response = await http
+            .get(Uri.parse("http://$ip:$port/api/moisture"))
             .timeout(const Duration(seconds: 2));
         if (response.statusCode == 200) {
           return jsonDecode(response.body);
@@ -89,11 +94,13 @@ class Esp32Service {
         final data = Map<String, dynamic>.from(snapshot.value as Map);
         final firebaseMoisture = data["moisture"] as Map?;
         if (firebaseMoisture != null) {
-           // Standardize to match ESP32 JSON format
-           return {
-             "main_motor": {"percent": data["mainMotorMoisture"] ?? 0},
-             ...firebaseMoisture.map((key, value) => MapEntry(key, {"percent": value}))
-           };
+          // Standardize to match ESP32 JSON format
+          return {
+            "main_motor": {"percent": data["mainMotorMoisture"] ?? 0},
+            ...firebaseMoisture.map(
+              (key, value) => MapEntry(key, {"percent": value}),
+            ),
+          };
         }
       }
     }
@@ -110,7 +117,9 @@ class Esp32Service {
     if (ip != null && ip.isNotEmpty) {
       String url = "http://$ip:$port${isOn ? "/api/all/on" : "/api/all/off"}";
       try {
-        final response = await http.post(Uri.parse(url)).timeout(const Duration(seconds: 3));
+        final response = await http
+            .post(Uri.parse(url))
+            .timeout(const Duration(seconds: 3));
         localSuccess = response.statusCode == 200;
         if (localSuccess) return true;
       } catch (_) {}
@@ -124,10 +133,11 @@ class Esp32Service {
         await _db.ref("devices/$deviceId/stopAll").set(true);
       } else {
         // Set all individual motors to true in Firebase
-        // We use individual sets here instead of .update() so the ESP32 Stream 
+        // We use individual sets here instead of .update() so the ESP32 Stream
         // receives individual data paths matching "/motors/X" exactly as expected!
         await Future.wait([
-          for(int i=0; i<9; i++) _db.ref("devices/$deviceId/motors/$i").set(true)
+          for (int i = 0; i < 9; i++)
+            _db.ref("devices/$deviceId/motors/$i").set(true),
         ]);
       }
       return true;
@@ -142,9 +152,12 @@ class Esp32Service {
 
     // Try Local WiFi first
     if (ip != null && ip.isNotEmpty) {
-      String url = "http://$ip:$port${isOn ? (motorId == 0 ? "/api/mainmotor/on" : "/api/motor/on?motor_id=$motorId") : (motorId == 0 ? "/api/mainmotor/off" : "/api/motor/off?motor_id=$motorId")}";
+      String url =
+          "http://$ip:$port${isOn ? (motorId == 0 ? "/api/mainmotor/on" : "/api/motor/on?motor_id=$motorId") : (motorId == 0 ? "/api/mainmotor/off" : "/api/motor/off?motor_id=$motorId")}";
       try {
-        final response = await http.post(Uri.parse(url)).timeout(const Duration(seconds: 2));
+        final response = await http
+            .post(Uri.parse(url))
+            .timeout(const Duration(seconds: 2));
         if (response.statusCode == 200) return true;
       } catch (_) {}
     }
@@ -194,12 +207,18 @@ class Esp32Service {
     final MDnsClient client = MDnsClient();
     try {
       await client.start();
-      await for (final PtrResourceRecord ptr in client.lookup<PtrResourceRecord>(
-          ResourceRecordQuery.serverPointer('_http._tcp.local'))) {
-        await for (final SrvResourceRecord srv in client.lookup<SrvResourceRecord>(
-            ResourceRecordQuery.service(ptr.domainName))) {
-          await for (final IPAddressResourceRecord ip in client.lookup<IPAddressResourceRecord>(
-              ResourceRecordQuery.addressIPv4(srv.target))) {
+      await for (final PtrResourceRecord ptr
+          in client.lookup<PtrResourceRecord>(
+            ResourceRecordQuery.serverPointer('_http._tcp.local'),
+          )) {
+        await for (final SrvResourceRecord srv
+            in client.lookup<SrvResourceRecord>(
+              ResourceRecordQuery.service(ptr.domainName),
+            )) {
+          await for (final IPAddressResourceRecord ip
+              in client.lookup<IPAddressResourceRecord>(
+                ResourceRecordQuery.addressIPv4(srv.target),
+              )) {
             String ipStr = ip.address.address;
             var details = await verifyConnectionAndGetDetails(ipStr, srv.port);
             if (details != null) {
@@ -209,7 +228,8 @@ class Esp32Service {
           }
         }
       }
-    } catch (_) {} finally {
+    } catch (_) {
+    } finally {
       client.stop();
     }
     return null;
@@ -233,18 +253,19 @@ class Esp32Service {
     return null;
   }
 
-  Future<Map<String, dynamic>?> verifyConnectionAndGetDetails(String ip, int port) async {
+  Future<Map<String, dynamic>?> verifyConnectionAndGetDetails(
+    String ip,
+    int port,
+  ) async {
     try {
-      final res = await http.get(Uri.parse("http://$ip:$port/api/system/status"))
+      final res = await http
+          .get(Uri.parse("http://$ip:$port/api/system/status"))
           .timeout(const Duration(milliseconds: 1500));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         String deviceId = data['deviceId'] ?? 'UNKNOWN_ID';
         await saveConfig(ip, port, deviceId: deviceId);
-        return {
-          'ip': ip,
-          'deviceId': deviceId
-        };
+        return {'ip': ip, 'deviceId': deviceId};
       }
     } catch (_) {}
     return null;

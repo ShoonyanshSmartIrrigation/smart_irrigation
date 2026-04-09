@@ -11,7 +11,7 @@ class PlantService extends ChangeNotifier {
 
   final DataManager _dataManager = DataManager();
   final Esp32Service _esp32Service = Esp32Service();
-  
+
   // State
   bool isSyncing = false;
   bool isTogglingAll = false;
@@ -19,7 +19,7 @@ class PlantService extends ChangeNotifier {
   DateTime? lastUpdated;
   final Map<int, bool> plantConnectionErrors = {};
   final Map<int, bool> _isProcessingToggle = {};
-  
+
   Timer? _syncTimer;
   bool _isDisposed = false;
 
@@ -28,7 +28,7 @@ class PlantService extends ChangeNotifier {
   }
 
   @override
-    //-------------------------------------------------------- Dispose Method ----------------------------------------------------------
+  //-------------------------------------------------------- Dispose Method ----------------------------------------------------------
   void dispose() {
     _isDisposed = true;
     _syncTimer?.cancel();
@@ -57,7 +57,7 @@ class PlantService extends ChangeNotifier {
   // Fetch moisture data from ESP32 or Firebase
   Future<bool> fetchMoistureData({int retry = 1}) async {
     if (isSyncing || _isDisposed) return false;
-    
+
     isSyncing = true;
     notifyListeners();
 
@@ -67,40 +67,45 @@ class PlantService extends ChangeNotifier {
         for (var plant in _dataManager.plants) {
           String sensorKey = "sensor_${plant.id}";
           if (data.containsKey(sensorKey)) {
-            int newMoisture = data[sensorKey]?["percent"] ?? plant.moistureLevel;
+            int newMoisture =
+                data[sensorKey]?["percent"] ?? plant.moistureLevel;
             if (plant.moistureLevel != newMoisture) {
               plant.moistureLevel = newMoisture;
             }
-            
+
             // Auto Mode logic based on thresholds
             if (plant.isAutoMode && !_dataManager.isSystemAutoMode) {
-              if (plant.moistureLevel < plant.minMoistureThreshold && !plant.isMotorOn) {
+              if (plant.moistureLevel < plant.minMoistureThreshold &&
+                  !plant.isMotorOn) {
                 togglePlantMotor(plant, isOn: true);
-              } else if (plant.moistureLevel >= plant.maxMoistureThreshold && plant.isMotorOn) {
+              } else if (plant.moistureLevel >= plant.maxMoistureThreshold &&
+                  plant.isMotorOn) {
                 togglePlantMotor(plant, isOn: false);
               }
             }
           }
         }
-        
+
         // Sync system status briefly
         final statusMap = await _esp32Service.getSystemStatus();
         if (statusMap != null && statusMap.containsKey('activeMotorsList')) {
           List<dynamic> activeList = statusMap['activeMotorsList'];
           for (var plant in _dataManager.plants) {
-            plant.isMotorOn = activeList.contains(plant.id) || activeList.contains(plant.id.toString());
+            plant.isMotorOn =
+                activeList.contains(plant.id) ||
+                activeList.contains(plant.id.toString());
           }
         }
-        
+
         lastUpdated = DateTime.now();
         isSyncing = false;
-        notifyListeners(); 
+        notifyListeners();
         return true;
       }
     } catch (e) {
       debugPrint("Moisture Sync Attempt Failed: $e");
       if (retry > 0 && !_isDisposed) {
-        isSyncing = false; 
+        isSyncing = false;
         return fetchMoistureData(retry: retry - 1);
       }
     } finally {
@@ -113,7 +118,7 @@ class PlantService extends ChangeNotifier {
   // Individual motor control using Esp32Service Local/Firebase Logic
   Future<bool> togglePlantMotor(Plant plant, {bool? isOn}) async {
     if (_isProcessingToggle[plant.id] == true || _isDisposed) return false;
-    
+
     _isProcessingToggle[plant.id] = true;
     bool targetState = isOn ?? !plant.isMotorOn;
     notifyListeners();
@@ -152,7 +157,7 @@ class PlantService extends ChangeNotifier {
   // Master toggle for all motors
   Future<void> toggleAllMotors(bool value) async {
     if (isTogglingAll || _isDisposed) return;
-    
+
     isTogglingAll = true;
     allMotorsError = false;
     notifyListeners();

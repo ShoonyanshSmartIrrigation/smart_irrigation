@@ -9,15 +9,21 @@ class WeatherService {
   Future<Map<String, dynamic>?> fetchWeather() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return null;
+      if (!serviceEnabled) {
+        return {"error": "Location Disabled. Please turn on GPS."};
+      }
 
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) return null;
+        if (permission == LocationPermission.denied) {
+          return {"error": "Location Permission Denied."};
+        }
       }
       
-      if (permission == LocationPermission.deniedForever) return null;
+      if (permission == LocationPermission.deniedForever) {
+        return {"error": "Location Permission Permanently Denied."};
+      }
 
       Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
@@ -30,11 +36,12 @@ class WeatherService {
 
       if (response.statusCode == 200) {
         return json.decode(response.body);
+      } else {
+        return {"error": "Weather API failed: ${response.statusCode}"};
       }
     } catch (e) {
-      // Ignored for now
+      return {"error": "Failed to get location."};
     }
-    return null;
   }
 }
 
