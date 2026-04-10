@@ -131,6 +131,11 @@ class Esp32Service {
       if (!isOn) {
         // Use the stopAll trigger I added to the ESP32 code
         await _db.ref("devices/$deviceId/stopAll").set(true);
+        // Set all individual motors to false in Firebase
+        await Future.wait([
+          for (int i = 0; i < 9; i++)
+            _db.ref("devices/$deviceId/motors/$i").set(false),
+        ]);
       } else {
         // Set all individual motors to true in Firebase
         // We use individual sets here instead of .update() so the ESP32 Stream

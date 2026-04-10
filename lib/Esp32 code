@@ -77,12 +77,21 @@ bool motorAutoEnabled[NUM_MOTORS] = {false,false,false,false,false,false,false,f
 unsigned long motorStartTime[NUM_MOTORS] = {0,0,0,0,0,0,0,0,0};
 bool motorAutoRunning[NUM_MOTORS] = {false,false,false,false,false,false,false,false,false};
 
-// BLE Global Variables
+// BLE Command processing - Safe design
+String pendingBLECommand = "";
+bool newBLECommand = false;
+String bleResponseBuffer = "";
+
+// BLE Connection state tracking
+bool deviceConnected = false;
+unsigned long lastBLENotify = 0;
+bool bleInitialized = false;
+
+// BLE Global Variables (for telemetry only)
 NimBLEServer* pBLEServer = nullptr;
 NimBLECharacteristic* pTelemetryChar = nullptr;
 NimBLECharacteristic* pSystemChar = nullptr;
-unsigned long lastBLENotify = 0;
-bool bleInitialized = false;
+NimBLECharacteristic* pControlChar = nullptr;
 
 // Forward declarations
 void setupServer();
@@ -109,125 +118,115 @@ void loadAllMotorSettings();
 void initBLE();
 void handleBLENotifications();
 
-// BLE Server Callbacks - handles connect/disconnect
+// BLE Server Callbacks - Fixed Connection Handling
 class MyServerCallbacks : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* pServer) {
-        Serial.println("BLE Client Connected!");
-        Serial.println("Connected clients: " + String(pServer->getConnectedCount()));
-        // Keep advertising so other devices can also connect
-        NimBLEDevice::startAdvertising();
+        deviceConnected = true;
+        Serial.println("BLE Client Connected! Clients: " + String(pServer->getConnectedCount()));
+        // DO NOT restart advertising - this causes the disconnect loop!
     }
 
     void onDisconnect(NimBLEServer* pServer) {
-        Serial.println("BLE Client Disconnected");
-        Serial.println("Restarting advertising...");
-        // Restart advertising so phone can reconnect
-        NimBLEDevice::startAdvertising();
-        Serial.println("Advertising restarted");
+        deviceConnected = false;
+        Serial.println("BLE Client Disconnected. Clients: " + String(pServer->getConnectedCount()));
+
+        // Wait 2 seconds before restarting advertising to prevent rapid restart loops
+        Serial.println("Waiting 2 seconds before restarting advertising...");
+        delay(2000);
+
+        if (pServer->getConnectedCount() == 0) {
+            Serial.println("Restarting advertising...");
+            NimBLEDevice::startAdvertising();
+            Serial.println("Advertising restarted safely");
+        }
     }
 };
 
-// BLE Callback Class
-class MyBLECallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic* pCharacteristic) {
-        String value = pCharacteristic->getValue().c_str();
-        Serial.println("BLE Command received: " + value);
+// UNIFIED API CORE - processes commands from both WiFi HTTP and BLE
+String processCommand(String rawCmd) {
+    rawCmd.trim();
+    rawCmd.toUpperCase();
 
-        JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, value);
+    JsonDocument doc;
+    String response = "";
 
-        if (error) {
-            Serial.println("BLE JSON parse error: " + String(error.c_str()));
-            return;
-        }
-
-        String action = doc["action"] | "";
-
-        // ── Motor ON ──────────────────────────────────
-        if (action == "motor_on") {
-            int id = constrain((int)(doc["id"] | 0), 0, 8);
-            autoMode = false;
-            motorStates[id] = true;
-            digitalWrite(MOTOR_PINS[id], HIGH);
-            Serial.println("BLE Motor " + String(id) + " ON");
-        }
-            // ── Motor OFF ─────────────────────────────────
-        else if (action == "motor_off") {
-            int id = constrain((int)(doc["id"] | 0), 0, 8);
-            autoMode = false;
-            motorStates[id] = false;
-            digitalWrite(MOTOR_PINS[id], LOW);
-            Serial.println("BLE Motor " + String(id) + " OFF");
-        }
-            // ── All ON ────────────────────────────────────
-        else if (action == "all_on") {
+    // Simple command format: "ON:1", "OFF:1", "ON:ALL", "OFF:ALL", "STATUS"
+    if (rawCmd.startsWith("ON:")) {
+        String zoneStr = rawCmd.substring(3);
+        if (zoneStr == "ALL") {
             turnAllMotorsOn();
-            Serial.println("BLE All motors ON");
+            doc["action"] = "ALL_ON";
+            doc["status"] = "ok";
+        } else {
+            int zone = zoneStr.toInt();
+            if (zone >= 0 && zone < NUM_MOTORS) {
+                autoMode = false;
+                motorStates[zone] = true;
+                digitalWrite(MOTOR_PINS[zone], HIGH);
+                doc["zone"] = zone;
+                doc["state"] = "ON";
+                doc["status"] = "ok";
+            } else {
+                doc["status"] = "error";
+                doc["message"] = "Invalid zone number";
+            }
         }
-            // ── All OFF ───────────────────────────────────
-        else if (action == "all_off") {
+    }
+    else if (rawCmd.startsWith("OFF:")) {
+        String zoneStr = rawCmd.substring(4);
+        if (zoneStr == "ALL") {
             turnAllMotorsOff();
-            Serial.println("BLE All motors OFF");
-        }
-            // ── Auto Start ────────────────────────────────
-        else if (action == "auto_start") {
-            int duration = doc["duration"] | 25;
-            if (duration <= 0) duration = 25;
-            bool motorSelection[NUM_MOTORS];
-            for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = true;
-            if (doc.containsKey("motors")) {
-                for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = false;
-                JsonArray arr = doc["motors"];
-                for (int motorId : arr) {
-                    if (motorId >= 1 && motorId <= NUM_MOTORS)
-                        motorSelection[motorId - 1] = true;
-                }
+            doc["action"] = "ALL_OFF";
+            doc["status"] = "ok";
+        } else {
+            int zone = zoneStr.toInt();
+            if (zone >= 0 && zone < NUM_MOTORS) {
+                autoMode = false;
+                motorStates[zone] = false;
+                digitalWrite(MOTOR_PINS[zone], LOW);
+                doc["zone"] = zone;
+                doc["state"] = "OFF";
+                doc["status"] = "ok";
+            } else {
+                doc["status"] = "error";
+                doc["message"] = "Invalid zone number";
             }
-            startIrrigation((unsigned long)duration * 60 * 1000, motorSelection, true);
-            Serial.println("BLE Auto started: " + String(duration) + " min");
         }
-            // ── Auto Stop ─────────────────────────────────
-        else if (action == "auto_stop") {
-            stopAllMotors();
-            Serial.println("BLE Auto stopped");
+    }
+    else if (rawCmd == "STATUS") {
+        JsonArray motors = doc.createNestedArray("motors");
+        for (int i = 0; i < NUM_MOTORS; i++) {
+            JsonObject motorObj = motors.createNestedObject();
+            motorObj["id"] = i;
+            motorObj["state"] = motorStates[i] ? "ON" : "OFF";
         }
-            // ── Alarm Set ─────────────────────────────────
-        else if (action == "alarm_set") {
-            int hour     = constrain((int)(doc["hour"]   | 0), 0, 23);
-            int minute   = constrain((int)(doc["minute"] | 0), 0, 59);
-            int duration = doc["duration"] | 25;
-            if (duration <= 0) duration = 25;
-            bool motorSelection[NUM_MOTORS];
-            for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = true;
-            if (doc.containsKey("motors")) {
-                for (int i = 0; i < NUM_MOTORS; i++) motorSelection[i] = false;
-                JsonArray arr = doc["motors"];
-                for (int motorId : arr) {
-                    if (motorId >= 1 && motorId <= NUM_MOTORS)
-                        motorSelection[motorId - 1] = true;
-                }
-            }
-            alarmHour     = hour;
-            alarmMinute   = minute;
-            alarmDuration = (unsigned long)duration * 60 * 1000;
-            alarmEnabled  = true;
-            alarmRunning  = false;
-            lastAlarmTriggerDay = -1;
-            for (int i = 0; i < NUM_MOTORS; i++)
-                alarmSelectedMotors[i] = motorSelection[i];
-            Serial.println("BLE Alarm set: " + String(hour) + ":" + String(minute));
-        }
-            // ── Alarm Stop ────────────────────────────────
-        else if (action == "alarm_stop") {
-            stopAlarmIrrigation();
-            Serial.println("BLE Alarm stopped");
-        }
-            // ── Unknown ───────────────────────────────────
-        else {
-            Serial.println("BLE Unknown action: " + action);
+        doc["autoMode"] = autoMode;
+        doc["alarmEnabled"] = alarmEnabled;
+        doc["status"] = "ok";
+    }
+    else {
+        doc["status"] = "error";
+        doc["message"] = "Unknown command";
+    }
+
+    serializeJson(doc, response);
+    return response;
+}
+
+// BLE Control Characteristic Callback - Safe Design (No processing in callback)
+class MyBLEControlCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* pCharacteristic) {
+        // ONLY store command - no processing in callback
+        String command = pCharacteristic->getValue().c_str();
+
+        if (command.length() > 0) {
+            pendingBLECommand = command;
+            newBLECommand = true;
+            Serial.println("BLE Command received: " + command);
         }
     }
 };
+
 
 // ─── Helper: CORS headers ─────────────────────────────────────────────────────
 void sendCORSHeaders() {
@@ -813,7 +812,10 @@ void setup() {
     server.begin();
     Serial.println(" HTTP Server Started\n");
 
-    // Initialize BLE
+    // BluetoothSerial removed - using NimBLE for all communication
+    Serial.println("✅ Using NimBLE for all BLE communication");
+
+    // Initialize BLE for telemetry only
     initBLE();
     Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 }
@@ -824,6 +826,15 @@ void loop() {
     checkWiFiConnection();
     quickConnectionTest();
     debugWiFiStatus();
+
+    // Process BLE commands (safe design - outside callback)
+    if (newBLECommand && pendingBLECommand.length() > 0) {
+        String response = processCommand(pendingBLECommand);
+        bleResponseBuffer = response;
+        pendingBLECommand = "";
+        newBLECommand = false;
+        Serial.println("BLE Command processed: " + response);
+    }
 
     // Auto mode completion check
     if (autoMode && (millis() - irrigationStartTime >= irrigationDuration)) {
@@ -839,7 +850,7 @@ void loop() {
     readAllMoistureSensors();
     reportMotorStatus();
 
-    // Handle BLE notifications
+    // Handle BLE notifications (safe telemetry only)
     handleBLENotifications();
     debugHTTPRequests();
 }
@@ -856,60 +867,50 @@ void setupServer() {
         }
     });
 
-    // Main motor ON
+    // Main motor ON - Using unified API
     server.on("/api/mainmotor/on", HTTP_ANY, []() {
         sendCORSHeaders();
         if (server.method() == HTTP_OPTIONS) {
             server.send(200, "text/plain", "");
             return;
         }
-        autoMode = false;
-        motorStates[0] = true;
-        digitalWrite(MOTOR_PINS[0], HIGH);
-        sendJsonResponse("{\"status\":\"ok\",\"motor\":\"main\",\"motor_id\":0,\"led\":\"on\"}");
+        String response = processCommand("ON:0");
+        sendJsonResponse(response);
     });
 
-    // Main motor OFF
+    // Main motor OFF - Using unified API
     server.on("/api/mainmotor/off", HTTP_ANY, []() {
         sendCORSHeaders();
         if (server.method() == HTTP_OPTIONS) {
             server.send(200, "text/plain", "");
             return;
         }
-        autoMode = false;
-        motorStates[0] = false;
-        digitalWrite(MOTOR_PINS[0], LOW);
-        sendJsonResponse("{\"status\":\"ok\",\"motor\":\"main\",\"motor_id\":0,\"led\":\"off\"}");
+        String response = processCommand("OFF:0");
+        sendJsonResponse(response);
     });
 
-    // Individual motor ON
+    // Individual motor ON - Using unified API
     server.on("/api/motor/on", HTTP_ANY, []() {
         sendCORSHeaders();
         if (server.method() == HTTP_OPTIONS) {
             server.send(200, "text/plain", "");
             return;
         }
-        autoMode = false;
         int motorId = constrain(server.arg("motor_id").toInt(), 0, 8);
-        motorStates[motorId] = true;
-        digitalWrite(MOTOR_PINS[motorId], HIGH);
-        sendJsonResponse("{\"status\":\"ok\",\"motor_id\":" + String(motorId) + ",\"state\":\"on\"}");
+        String response = processCommand("ON:" + String(motorId));
+        sendJsonResponse(response);
     });
 
-    // Individual motor OFF
-    // BUG FIX: Test page JS was calling /api/motor/on for both ON and OFF.
-    // The endpoint itself was correct; fixed test page JS below.
+    // Individual motor OFF - Using unified API
     server.on("/api/motor/off", HTTP_ANY, []() {
         sendCORSHeaders();
         if (server.method() == HTTP_OPTIONS) {
             server.send(200, "text/plain", "");
             return;
         }
-        autoMode = false;
         int motorId = constrain(server.arg("motor_id").toInt(), 0, 8);
-        motorStates[motorId] = false;
-        digitalWrite(MOTOR_PINS[motorId], LOW);
-        sendJsonResponse("{\"status\":\"ok\",\"motor_id\":" + String(motorId) + ",\"state\":\"off\"}");
+        String response = processCommand("OFF:" + String(motorId));
+        sendJsonResponse(response);
     });
 
     // Motor status
@@ -1378,26 +1379,63 @@ updateUI(); loadSensors(); loadSystem();
 )rawhtml";
         server.send(200, "text/html", html);
     });
+
+    // UNIFIED COMMAND ENDPOINTS - Same API as Bluetooth
+    // POST /command - Unified command endpoint
+    server.on("/command", HTTP_POST, []() {
+        sendCORSHeaders();
+        String command = server.arg("plain");
+        command.trim();
+
+        if (command.length() == 0) {
+            sendJsonResponse("{\"status\":\"error\",\"message\":\"Empty command\"}");
+            return;
+        }
+
+        // Process command through unified API
+        String response = processCommand(command);
+        sendJsonResponse(response);
+        Serial.println("WiFi Unified Command: " + command + " -> " + response);
+    });
+
+    // GET /status - Unified status endpoint
+    server.on("/status", HTTP_GET, []() {
+        sendCORSHeaders();
+        // Process STATUS command through unified API
+        String response = processCommand("STATUS");
+        sendJsonResponse(response);
+    });
+
+    // BLE debug endpoint - Test BLE connectivity
+    server.on("/api/ble/status", HTTP_GET, []() {
+        sendCORSHeaders();
+        String json = "{\"status\":\"ok\",\"ble_initialized\":" + String(bleInitialized ? "true" : "false") + ",\"connected_clients\":" + String(pBLEServer ? pBLEServer->getConnectedCount() : 0) + ",\"device_name\":\"ESP32_Irrigation\",\"mtu\":128}";
+        sendJsonResponse(json);
+    });
+
+    // OPTIONS handler for CORS
+    server.on("/command", HTTP_OPTIONS, []() {
+        sendCORSHeaders();
+        server.send(200, "text/plain", "");
+    });
 }
 
-// ─── BLE Implementation ────────────────────────────────────────────────────────
 void initBLE() {
     Serial.println("Initializing BLE...");
 
     NimBLEDevice::init("ESP32_Irrigation");
-    NimBLEDevice::setMTU(512);
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);  // Max power for better range
-
-    // No security needed for irrigation controller
-    // Security settings removed - they caused connection rejection
+    NimBLEDevice::setMTU(128);  // Very safe MTU - maximum compatibility
+    NimBLEDevice::setPower(ESP_PWR_LVL_P6);  // Medium power - more stable
+    NimBLEDevice::setScanFilterMode(CONFIG_BTDM_SCAN_DUPL_TYPE_DATA_DEVICE);  // Reduce scan duplicates
 
     Serial.println("BLE Device Name: ESP32_Irrigation");
-    Serial.println("MTU Size: 512 bytes");
+    Serial.println("MTU Size: 128 bytes (maximum compatibility)");
+    Serial.println("Power Level: Medium (P6) - Most stable");
 
     // Create BLE Server
     pBLEServer = NimBLEDevice::createServer();
 
-    // Register server callbacks for connect/disconnect handling
+    // Register server callbacks for connection handling
     static MyServerCallbacks serverCallbacks;
     pBLEServer->setCallbacks(&serverCallbacks);
 
@@ -1416,32 +1454,34 @@ void initBLE() {
             NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
     );
 
-    NimBLECharacteristic* pControlChar = pService->createCharacteristic(
+    // Control Characteristic for commands (WRITE only)
+    pControlChar = pService->createCharacteristic(
             BLE_CTRL_CHAR_UUID,
-            NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE |
-            NIMBLE_PROPERTY::WRITE_NR
+            NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
     );
 
-    // Set up control characteristic callback
-    static MyBLECallbacks bleCallbacks;
-    pControlChar->setCallbacks(&bleCallbacks);
+    // Set up safe control callback
+    static MyBLEControlCallbacks bleControlCallbacks;
+    pControlChar->setCallbacks(&bleControlCallbacks);
 
     // Start the service
     pService->start();
 
-    // Start advertising
+    // Start advertising - Fixed configuration
     NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(BLE_SERVICE_UUID);
     pAdvertising->setMinInterval(160);  // 160 * 0.625ms = 100ms
     pAdvertising->setMaxInterval(320);  // 320 * 0.625ms = 200ms
+    pAdvertising->setScanFilter(false, false);  // Allow all connections
 
     // Device name in scan response only - UUID already in advertisement
-    // Duplicate UUID in both causes connection rejection on some phones
     NimBLEAdvertisementData scanResponse;
     scanResponse.setName("ESP32_Irrigation");
     pAdvertising->setScanResponseData(scanResponse);
 
+    Serial.println("Starting BLE advertising...");
     NimBLEDevice::startAdvertising();
+    Serial.println("BLE advertising started successfully");
 
     bleInitialized = true;
     Serial.println("BLE initialized and advertising");
@@ -1450,14 +1490,15 @@ void initBLE() {
 }
 
 void handleBLENotifications() {
-    if (!bleInitialized || millis() - lastBLENotify < BLE_NOTIFY_INTERVAL) {
+    // Safe timing - send every 3 seconds (non-blocking)
+    if (!bleInitialized || millis() - lastBLENotify < 3000) {
         return;
     }
 
     lastBLENotify = millis();
 
-    // Skip if no clients connected - prevents BLE stack errors
-    if (!pBLEServer || pBLEServer->getConnectedCount() == 0) {
+    // ONLY send if device connected - prevents BLE stack errors
+    if (!deviceConnected || !pBLEServer || !pTelemetryChar) {
         return;
     }
 

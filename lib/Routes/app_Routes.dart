@@ -34,6 +34,7 @@ class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
   static const String signup = '/signup';
+  static const String forgotPassword = '/forgot-password';
   static const String dashboard = '/dashboard';
   static const String zones = '/zones';
   static const String schedule = '/schedule';
@@ -49,9 +50,13 @@ class AppRoutes {
         final user = FirebaseAuth.instance.currentUser;
         final isLoggedIn = user != null;
 
+        if (state.matchedLocation == splash) {
+          return null; // Let the splash screen display
+        }
+
         final isAuthRoute = state.matchedLocation == login ||
             state.matchedLocation == signup ||
-            state.matchedLocation == splash;
+            state.matchedLocation == forgotPassword;
             
         final isSetupRoute = state.matchedLocation == setup;
 
@@ -100,6 +105,11 @@ class AppRoutes {
         name: 'signup',
         path: signup,
         builder: (context, state) => const SignupScreen(),
+      ),
+      GoRoute(
+        name: 'forgotPassword',
+        path: forgotPassword,
+        builder: (context, state) => const ForgotPasswordScreen(),
       ),
       GoRoute(
         name: 'setup',

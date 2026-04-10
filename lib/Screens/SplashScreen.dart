@@ -50,25 +50,12 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   Future<void> _initApp() async {
     try {
-      // ✅ Run both tasks in parallel (faster startup)
-      final results = await Future.wait([
-        Future.delayed(const Duration(seconds: 3)), // reduced delay
-        SharedPreferences.getInstance(),
-      ]);
-
-      final prefs = results[1] as SharedPreferences;
-      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-
+      await Future.delayed(const Duration(seconds: 3));
       if (!mounted) return;
-
-      context.go(isLoggedIn ? AppRoutes.dashboard : AppRoutes.login);
-
+      context.go(AppRoutes.dashboard);
     } catch (e) {
       debugPrint("Splash Error: $e");
-
       if (!mounted) return;
-
-      // œ… fallback navigation (important for production)
       context.go(AppRoutes.login);
     }
   }
@@ -145,13 +132,12 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       ),
                     ),
                   ),
-                  const SizedBox(height: 40),
                   FadeTransition(
                     opacity: _fadeAnimation,
                     child: Column(
                       children: [
                         SizedBox(
-                          width: 150,
+                          width: 180,
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(10),
                             child: LinearProgressIndicator(

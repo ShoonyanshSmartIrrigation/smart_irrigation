@@ -101,35 +101,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const SizedBox(height: 10),
             
-            _buildSectionHeader("Irrigation Thresholds"),
-            _buildSettingsGroup([
-              _buildSettingItem(
-                icon: Icons.water_drop_outlined,
-                title: "Minimum Moisture",
-                subtitle: "${_service.minMoisture}%",
-                onTap: () => _showMoistureDialog(
-                  "Set Minimum Moisture", 
-                  _service.minMoisture, 
-                  0, 
-                  _service.maxMoisture - 1, 
-                  (val) => _service.updateSetting("min_moisture", val)
-                ),
-              ),
-              _buildSettingItem(
-                icon: Icons.waves,
-                title: "Maximum Moisture",
-                subtitle: "${_service.maxMoisture}%",
-                onTap: () => _showMoistureDialog(
-                  "Set Maximum Moisture", 
-                  _service.maxMoisture, 
-                  _service.minMoisture + 1, 
-                  100, 
-                  (val) => _service.updateSetting("max_moisture", val)
-                ),
-                showDivider: false,
-              ),
-            ]),
-            
             _buildSectionHeader("System Configuration"),
             _buildSettingsGroup([
               _buildSettingItem(
@@ -139,15 +110,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: _showIpDialog,
               ),
               _buildSettingItem(
-                icon: Icons.memory_rounded,
-                title: 'ESP32 Configuration',
-                subtitle: 'Manage IP and Wi-Fi',
-                onTap: () => context.push('/esp32Config'),
-              ),
-              const Divider(color: AppColors.settingsDivider),
-              _buildSettingItem(
                 icon: Icons.wifi_find,
-                title: "Auto Discovery",
+                title: "ESP32 Configuration",
                 subtitle: "Find ESP32 on local network",
                 onTap: () => context.push('/esp32Config'),
                 iconColor: Colors.orange[800]!,
@@ -272,44 +236,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Divider(height: 1, color: AppColors.settingsDivider),
           ),
       ],
-    );
-  }
-
-  void _showMoistureDialog(String title, int currentValue, int min, int max, Function(int) onChanged) {
-    TextEditingController controller = TextEditingController(text: currentValue.toString());
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            hintText: "Enter value (%)",
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () {
-              int? value = int.tryParse(controller.text);
-              if (value != null && value >= min && value <= max) {
-                onChanged(value);
-                Navigator.pop(context);
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Enter value between $min and $max")));
-              }
-            },
-            child: const Text("SAVE", style: TextStyle(color: AppColors.white)),
-          ),
-        ],
-      ),
     );
   }
 

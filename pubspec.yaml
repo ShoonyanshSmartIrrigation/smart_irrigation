@@ -37,7 +37,7 @@ dependencies:
 
 flutter_icons:
   android: true
-  image_path: "assets/jpeg/icon.jpeg"
+  image_path: "assets/jpeg/Splash_Logo1.jpeg"
 
 
 dev_dependencies:

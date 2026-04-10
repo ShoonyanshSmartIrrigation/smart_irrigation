@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const MyApp());
@@ -93,15 +94,23 @@ class _BluetoothPairingScreenState extends State<BluetoothPairingScreen> {
     FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
 
     FlutterBluePlus.scanResults.listen((results) {
-      setState(() {
-        // Removed strict "ESP32" filter so you can see ALL nearby devices for debugging.
-        // You can re-enable filtering later if needed.
-        devices = results;
-      });
+      if (mounted) {
+        setState(() {
+          // Filter to show only ESP32 related devices (case insensitive)
+          devices = results.where((result) {
+            String name = result.device.platformName.isNotEmpty
+                ? result.device.platformName
+                : result.device.advName;
+            return name.toLowerCase().contains("esp");
+          }).toList();
+        });
+      }
     });
 
     await Future.delayed(const Duration(seconds: 5));
-    setState(() => isScanning = false);
+    if (mounted) {
+      setState(() => isScanning = false);
+    }
   }
 
   Future<void> connectToDevice(BluetoothDevice device) async {
@@ -151,10 +160,9 @@ class _BluetoothPairingScreenState extends State<BluetoothPairingScreen> {
               const SnackBar(content: Text("WiFi credentials sent")),
             );
 
-            break;
+            // We do not break here so we can also discover the control characteristic
           }
         }
-        if (dataSent) break;
       }
 
       if (!dataSent) {
@@ -174,16 +182,23 @@ class _BluetoothPairingScreenState extends State<BluetoothPairingScreen> {
   Future<void> sendBleCommand(String command) async {
     for (var service in discoveredServices) {
       for (var characteristic in service.characteristics) {
-        // Look for our ctrl-001 characteristic
-        if (characteristic.uuid.toString().contains("1234567890ac") || characteristic.uuid.toString().contains("ctrl-001")) {
-          await characteristic.write(command.codeUnits);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Sent: $command")),
-          );
-          return;
+        // Look for writable characteristic
+        if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
+          try {
+            await characteristic.write(command.codeUnits);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("Sent: $command")),
+            );
+            return;
+          } catch (e) {
+            print("Failed to write to $characteristic - $e");
+          }
         }
       }
     }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Could not find writable characteristic for command")),
+    );
   }
 
   @override
@@ -264,7 +279,7 @@ class _BluetoothPairingScreenState extends State<BluetoothPairingScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       ElevatedButton(
-                        onPressed: () => sendBleCommand('{"action": "auto_start", "duration": 25}'),
+                        onPressed: () => sendBleCommand("AUTO_ON"),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
                           foregroundColor: Colors.white,
@@ -272,7 +287,7 @@ class _BluetoothPairingScreenState extends State<BluetoothPairingScreen> {
                         child: const Text("AUTO ON"),
                       ),
                       ElevatedButton(
-                        onPressed: () => sendBleCommand('{"action": "auto_stop"}'),
+                        onPressed: () => sendBleCommand("AUTO_OFF"),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red,
                           foregroundColor: Colors.white,

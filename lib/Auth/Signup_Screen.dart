@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -32,7 +33,8 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController passwordController = TextEditingController();
 
   bool _obscurePassword = true;
-  bool _isLoading = false;
+  bool _isSignupLoading = false;
+  bool _isGoogleLoading = false;
   String _passwordStrength = "";
   Color _strengthColor = Colors.transparent;
 
@@ -85,7 +87,7 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   void handleSignUp() async {
-    if (_isLoading) return;
+    if (_isSignupLoading) return;
 
     if (!_formKey.currentState!.validate()) return;
 
@@ -121,13 +123,13 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() => _isSignupLoading = true);
 
     try {
       User? user = await _authService.signUpWithEmail(email, password, name, phone);
 
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() => _isSignupLoading = false);
 
       if (user != null) {
         showToast("Signup Successful!");
@@ -137,17 +139,17 @@ class _SignupScreenState extends State<SignupScreen> {
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() => _isSignupLoading = false);
       showToast(e.message ?? "An error occurred during signup");
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() => _isSignupLoading = false);
       showToast("Something went wrong. Please try again.");
     }
   }
 
   void handleGoogleSignIn() async {
-    if (_isLoading) return;
+    if (_isGoogleLoading) return;
 
     var connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult.contains(ConnectivityResult.none)) {
@@ -155,13 +157,13 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() => _isGoogleLoading = true);
 
     try {
       User? user = await _authService.signInWithGoogle();
       
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() => _isGoogleLoading = false);
 
       if (user != null) {
         showToast("Logged in with Google!");
@@ -171,11 +173,11 @@ class _SignupScreenState extends State<SignupScreen> {
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() => _isGoogleLoading = false);
       showToast(e.message ?? "Google Sign-In failed");
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() => _isGoogleLoading = false);
       showToast("Google Sign-In error occurred.");
     }
   }
@@ -261,6 +263,10 @@ class _SignupScreenState extends State<SignupScreen> {
                       inputType: TextInputType.phone, 
                       textInputAction: TextInputAction.next,
                       autofillHints: [AutofillHints.telephoneNumber],
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(10),
+                      ],
                       validator: (value) {
                         if (value == null || value.isEmpty) return "Phone number is required";
                         if (!RegExp(r'^[0-9]{10}$').hasMatch(value)) return "Enter valid 10-digit number";
@@ -314,17 +320,20 @@ class _SignupScreenState extends State<SignupScreen> {
 
                     const SizedBox(height: 30),
 
-                    _isLoading 
+                    _isSignupLoading 
                     ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                     : ElevatedButton(
-                      onPressed: _isLoading ? null : handleSignUp,
+                      onPressed: _isGoogleLoading ? null : handleSignUp,
                       style: ElevatedButton.styleFrom(
+                        splashFactory: NoSplash.splashFactory,
                         backgroundColor: AppColors.primary,
                         foregroundColor: AppColors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                         elevation: 4,
                         shadowColor: AppColors.signupButtonShadow,
+                      ).copyWith(
+                        overlayColor: WidgetStateProperty.all(Colors.transparent),
                       ),
                       child: const Text(
                         "SIGN UP", 
@@ -347,25 +356,39 @@ class _SignupScreenState extends State<SignupScreen> {
 
                     const SizedBox(height: 20),
 
-                    OutlinedButton(
-                      onPressed: _isLoading ? null : handleGoogleSignIn,
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                        side: const BorderSide(color: AppColors.signupDivider, width: 1.5),
-                        backgroundColor: AppColors.signupGoogleButtonBg,
+                    _isGoogleLoading
+                    ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                    : ElevatedButton(
+                      onPressed: _isSignupLoading ? null : handleGoogleSignIn,
+                      style: ElevatedButton.styleFrom(
+                        splashFactory: NoSplash.splashFactory,
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black87,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          side: BorderSide(color: Colors.grey.shade200, width: 1.5),
+                        ),
+                        elevation: 2,
+                        shadowColor: Colors.black.withOpacity(0.05),
+                      ).copyWith(
+                        overlayColor: WidgetStateProperty.all(Colors.transparent),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           SvgPicture.asset(
-                            'assets/svg/google.svg',
-                            height: 24,
+                            "assets/svg/google.svg",
+                            height: 26,
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 6),
                           const Text(
-                            "Continue with Google", 
-                            style: TextStyle(color: AppColors.signupGoogleButtonText, fontWeight: FontWeight.w600, fontSize: 15)
+                            "Continue with Google",
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
                           ),
                         ],
                       ),
@@ -379,6 +402,9 @@ class _SignupScreenState extends State<SignupScreen> {
                         const Text("Already have an account? ", style: TextStyle(color: AppColors.signupTextGrey)),
                         TextButton(
                           onPressed: () => context.pop(),
+                          style: ButtonStyle(
+                            overlayColor: WidgetStateProperty.all(Colors.transparent),
+                          ),
                           child: const Text('Login', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                         ),
                       ],
@@ -406,56 +432,81 @@ class _SignupScreenState extends State<SignupScreen> {
     VoidCallback? onTogglePassword,
     void Function(String)? onFieldSubmitted,
     Iterable<String>? autofillHints,
+    List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator}
   ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.signupTextFieldBg,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: const [
-          BoxShadow(
-            color: AppColors.signupShadow,
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: TextFormField(
-        controller: controller,
-        focusNode: focusNode,
-        keyboardType: inputType,
-        textInputAction: textInputAction,
-        obscureText: obscureText,
-        autofillHints: autofillHints,
-        validator: validator,
-        onFieldSubmitted: (value) {
-          if (nextFocusNode != null) {
-            FocusScope.of(context).requestFocus(nextFocusNode);
-          }
-          if (onFieldSubmitted != null) {
-            onFieldSubmitted(value);
-          }
-        },
-        style: const TextStyle(fontWeight: FontWeight.w500),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: const TextStyle(color: AppColors.signupTextGrey, fontSize: 14),
-          prefixIcon: Icon(icon, color: AppColors.primary, size: 22),
-          suffixIcon: isPassword 
-            ? IconButton(
-                icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility, color: AppColors.grey),
-                onPressed: onTogglePassword,
-              )
-            : null,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: BorderSide.none,
-          ),
-          filled: true,
-          fillColor: AppColors.signupTextFieldBg,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        ),
-      ),
+    return FormField<String>(
+      initialValue: controller.text,
+      validator: validator,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      builder: (FormFieldState<String> state) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.signupTextFieldBg,
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: const [
+                  BoxShadow(
+                    color: AppColors.signupShadow,
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: TextField(
+                controller: controller,
+                focusNode: focusNode,
+                keyboardType: inputType,
+                textInputAction: textInputAction,
+                obscureText: obscureText,
+                autofillHints: autofillHints,
+                inputFormatters: inputFormatters,
+                onChanged: (value) => state.didChange(value),
+                onSubmitted: (value) {
+                  if (nextFocusNode != null) {
+                    FocusScope.of(context).requestFocus(nextFocusNode);
+                  }
+                  if (onFieldSubmitted != null) {
+                    onFieldSubmitted(value);
+                  }
+                },
+                style: const TextStyle(fontWeight: FontWeight.w500),
+                decoration: InputDecoration(
+                  labelText: label,
+                  labelStyle: const TextStyle(color: AppColors.signupTextGrey, fontSize: 14),
+                  prefixIcon: Icon(icon, color: AppColors.primary, size: 22),
+                  suffixIcon: isPassword 
+                    ? IconButton(
+                        icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility, color: AppColors.grey),
+                        onPressed: onTogglePassword,
+                        splashColor: Colors.transparent,
+                        highlightColor: Colors.transparent,
+                        hoverColor: Colors.transparent,
+                      )
+                    : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: AppColors.signupTextFieldBg,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                ),
+              ),
+            ),
+            if (state.hasError)
+              Padding(
+                padding: const EdgeInsets.only(left: 16, top: 6),
+                child: Text(
+                  state.errorText!,
+                  style: TextStyle(color: Colors.red.shade700, fontSize: 12, fontWeight: FontWeight.w500),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
