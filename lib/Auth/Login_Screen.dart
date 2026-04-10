@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import '../Routes/app_routes.dart';
 import '../services/auth_service.dart';
 import '../Routes/app_routes.dart';
 
@@ -199,7 +200,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 30),
-                  
+
                   _buildTextField(
                     emailController, 
                     "Email Address", 
@@ -289,15 +290,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 20),
 
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text("Don't have an account?", style: TextStyle(color: Colors.white70)),
+                      const Text("Don't have an account?", style: TextStyle(color: AppColors.loginTextGrey)),
                       TextButton(
                         onPressed: () => context.push(AppRoutes.signup),
-                        child: const Text('Sign Up', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        child: const Text('Sign Up', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
@@ -342,7 +343,7 @@ class _LoginScreenState extends State<LoginScreen> {
           labelText: label,
           labelStyle: const TextStyle(color: AppColors.loginTextGrey, fontSize: 14),
           prefixIcon: Icon(icon, color: AppColors.primary, size: 22),
-          suffixIcon: isPassword 
+          suffixIcon: isPassword
             ? IconButton(
                 icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility, color: AppColors.grey),
                 onPressed: onTogglePassword,

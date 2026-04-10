@@ -15,7 +15,7 @@ class SetupLogic {
     return _authService.isFreshUser(user.uid);
   }
 
-  Future<void> saveDeviceDetails(String ip, String deviceId) async {
+  Future<void> saveDeviceDetails(String? ip, String deviceId) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       // Save locally
@@ -30,7 +30,7 @@ class SetupLogic {
       // 2. Initialize device node
       await dbRef.child('devices').child(deviceId).set({
         'owner': user.uid,
-        'ip': ip,
+        'ip': ip ?? 'Unknown',
         'lastUpdated': ServerValue.timestamp,
         'motors': {
           "1": {"isOn": false}, "2": {"isOn": false}, "3": {"isOn": false}, "4": {"isOn": false},
@@ -50,7 +50,7 @@ class SetupLogic {
   Future<void> completeSetup(BuildContext context, {String? ip, String? deviceId}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      if (ip != null && deviceId != null) {
+      if (deviceId != null) {
         await saveDeviceDetails(ip, deviceId);
       }
       await _authService.markSetupCompleted(user.uid);

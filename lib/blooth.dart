@@ -175,7 +175,7 @@ class _BluetoothPairingScreenState extends State<BluetoothPairingScreen> {
     for (var service in discoveredServices) {
       for (var characteristic in service.characteristics) {
         // Look for our ctrl-001 characteristic
-        if (characteristic.uuid.toString().contains("ctrl-001")) {
+        if (characteristic.uuid.toString().contains("1234567890ac") || characteristic.uuid.toString().contains("ctrl-001")) {
           await characteristic.write(command.codeUnits);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text("Sent: $command")),
@@ -264,7 +264,7 @@ class _BluetoothPairingScreenState extends State<BluetoothPairingScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       ElevatedButton(
-                        onPressed: () => sendBleCommand("AUTO_ON"),
+                        onPressed: () => sendBleCommand('{"action": "auto_start", "duration": 25}'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
                           foregroundColor: Colors.white,
@@ -272,7 +272,7 @@ class _BluetoothPairingScreenState extends State<BluetoothPairingScreen> {
                         child: const Text("AUTO ON"),
                       ),
                       ElevatedButton(
-                        onPressed: () => sendBleCommand("AUTO_OFF"),
+                        onPressed: () => sendBleCommand('{"action": "auto_stop"}'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red,
                           foregroundColor: Colors.white,

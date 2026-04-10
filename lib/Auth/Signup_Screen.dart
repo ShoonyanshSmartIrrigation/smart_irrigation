@@ -376,10 +376,10 @@ class _SignupScreenState extends State<SignupScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text("Already have an account? ", style: TextStyle(color: Colors.white70)),
+                        const Text("Already have an account? ", style: TextStyle(color: AppColors.signupTextGrey)),
                         TextButton(
                           onPressed: () => context.pop(),
-                          child: const Text('Login', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          child: const Text('Login', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),

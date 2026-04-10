@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/setup_logic.dart';
 import '../services/esp32_service.dart';
 import '../Core/theme/app_colors.dart';
+import '../bluetooth_connection.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -13,6 +14,7 @@ class SetupScreen extends StatefulWidget {
 class _SetupScreenState extends State<SetupScreen> {
   final SetupLogic _setupLogic = SetupLogic();
   final Esp32Service _esp32Service = Esp32Service();
+  final TextEditingController _deviceIdController = TextEditingController();
   
   int _currentStep = 0;
   bool _isLoading = false;
@@ -21,13 +23,17 @@ class _SetupScreenState extends State<SetupScreen> {
   String? _discoveredDeviceId;
   bool _isScanning = false;
   bool _scanComplete = false;
+  int _selectedMethodIndex = -1; // 0: Bluetooth, 1: Wi-Fi, 2: Manual
+  bool _isReadyToStart = false;
+
+  @override
+  void dispose() {
+    _deviceIdController.dispose();
+    super.dispose();
+  }
 
   void _nextStep() {
     if (_currentStep < 3) {
-      // Auto trigger scan when reaching step 3
-      if (_currentStep == 2 && !_scanComplete) {
-         _startScan();
-      }
       setState(() {
         _currentStep++;
       });
@@ -42,6 +48,7 @@ class _SetupScreenState extends State<SetupScreen> {
       _scanComplete = false;
       _discoveredIp = null;
       _discoveredDeviceId = null;
+      _isReadyToStart = false;
     });
 
     Map<String, dynamic>? resultData = await _esp32Service.startAutoDiscovery();
@@ -53,6 +60,7 @@ class _SetupScreenState extends State<SetupScreen> {
         if (resultData != null) {
           _discoveredIp = resultData['ip'];
           _discoveredDeviceId = resultData['deviceId'];
+          _isReadyToStart = true;
         }
       });
     }
@@ -83,31 +91,31 @@ class _SetupScreenState extends State<SetupScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(30),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: AppColors.primary.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, size: 80, color: AppColors.primary),
+            child: Icon(icon, size: 90, color: AppColors.primary),
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 40),
           Text(
             title,
             style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
               color: AppColors.primary,
             ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 15),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 30),
+            padding: const EdgeInsets.symmetric(horizontal: 40),
             child: Text(
               description,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
-                color: Colors.grey,
+                color: Colors.grey.shade600,
                 height: 1.5,
               ),
               textAlign: TextAlign.center,
@@ -119,72 +127,307 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Widget _buildScannerStep() {
-    return Column(
-      key: const ValueKey<int>(3),
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: _scanComplete && _discoveredIp != null 
-                ? Colors.green.withOpacity(0.1) 
-                : AppColors.primary.withOpacity(0.1),
-            shape: BoxShape.circle,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        key: const ValueKey<int>(3),
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.router_outlined, size: 70, color: AppColors.primary),
           ),
-          child: Icon(
-            _scanComplete && _discoveredIp != null 
-                ? Icons.check_circle_outline 
-                : Icons.wifi_find_outlined,
-            size: 80, 
-            color: _scanComplete && _discoveredIp != null ? Colors.green : AppColors.primary,
+          const SizedBox(height: 24),
+          const Text("Connect Sprinkler", style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.primary)),
+          const SizedBox(height: 8),
+          Text("Choose how to connect your device", style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
+          const SizedBox(height: 35),
+          
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildMethodCard(0, Icons.bluetooth, "Bluetooth"),
+              _buildMethodCard(1, Icons.wifi, "Wi-Fi Scan"),
+              _buildMethodCard(2, Icons.keyboard, "Manual ID"),
+            ],
+          ),
+          const SizedBox(height: 40),
+          
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: _selectedMethodIndex == 0 
+                ? _buildBluetoothUI()
+                : _selectedMethodIndex == 1 
+                    ? _buildWifiUI() 
+                    : _selectedMethodIndex == 2 
+                        ? _buildManualUI() 
+                        : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMethodCard(int index, IconData icon, String title) {
+    bool isSelected = _selectedMethodIndex == index;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedMethodIndex = index;
+          _isReadyToStart = false; // Reset until valid
+          if (index == 1 && !_scanComplete) {
+            _startScan();
+          } else if (index == 1 && _scanComplete && _discoveredIp != null) {
+            _isReadyToStart = true;
+          } else if (index == 2) {
+            _isReadyToStart = _deviceIdController.text.length == 10;
+          }
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        width: 105,
+        height: 110,
+        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: isSelected ? AppColors.primary.withValues(alpha: 0.4) : Colors.grey.withValues(alpha: 0.1),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+          border: Border.all(
+            color: isSelected ? AppColors.primary : Colors.grey.shade200,
+            width: 2,
           ),
         ),
-        const SizedBox(height: 30),
-        const Text("Connect Sprinkler", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.primary)),
-        const SizedBox(height: 15),
-        
-        if (_isScanning)
-          const Column(
-            children: [
-              CircularProgressIndicator(color: AppColors.primary),
-              SizedBox(height: 15),
-              Text("Scanning network for ESP32...", style: TextStyle(color: Colors.grey)),
-            ],
-          )
-        else if (_scanComplete && _discoveredIp != null)
-          Container(
-            padding: const EdgeInsets.all(15),
-            margin: const EdgeInsets.symmetric(horizontal: 30),
-            decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(10)),
-            child: Column(
-              children: [
-                const Text("✅ Device Found!", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                const SizedBox(height: 5),
-                Text("IP: $_discoveredIp", style: const TextStyle(color: Colors.black87)),
-                Text("ID: $_discoveredDeviceId", style: const TextStyle(color: Colors.black54, fontSize: 12)),
-              ],
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: isSelected ? Colors.white : Colors.grey.shade500, size: 32),
+            const SizedBox(height: 12),
+            Text(
+              title, 
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey.shade700, 
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600, 
+                fontSize: 13,
+              ), 
+              textAlign: TextAlign.center,
             ),
-          )
-        else
-          Column(
-            children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 40),
-                child: Text("Ensure your ESP32 is powered on and connected to the same Wi-Fi network.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, height: 1.5)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBluetoothUI() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.grey.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))
+        ],
+      ),
+      child: Column(
+        children: [
+          Text(
+            "Ensure your device is nearby. We will connect to ESP32_IRRIGATION.", 
+            textAlign: TextAlign.center, 
+            style: TextStyle(color: Colors.grey.shade600, height: 1.5, fontSize: 14),
+          ),
+          const SizedBox(height: 25),
+          ElevatedButton.icon(
+            onPressed: _isScanning ? null : () async {
+              setState(() {
+                _isScanning = true;
+              });
+            
+              try {
+                final btService = BluetoothConnectionService();
+                await btService.startScan();
+                
+                // Wait a bit for scan
+                await Future.delayed(const Duration(seconds: 4));
+                
+                await btService.stopScan();
+                final results = await btService.scanResults.first;
+                if (results.isNotEmpty) {
+                  final device = results.first.device;
+                  bool connected = await btService.connectToDevice(device);
+                  if (connected) {
+                    // In a real app we might read a specific characteristic here, 
+                    // but for now we'll use the device's remote ID or a mocked read.
+                    String fetchedDeviceId = device.remoteId.toString().replaceAll(':', '').substring(0, 10).toUpperCase();
+                    if (fetchedDeviceId.length < 10) fetchedDeviceId = fetchedDeviceId.padRight(10, 'A');
+
+                    if (mounted) {
+                      setState(() {
+                        _isReadyToStart = true;
+                        _discoveredDeviceId = fetchedDeviceId;
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Bluetooth connected: $_discoveredDeviceId!")));
+                    }
+                  } else {
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Failed to connect via Bluetooth")));
+                  }
+                } else {
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No ESP32_IRRIGATION found nearby")));
+                }
+              } catch (e) {
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Bluetooth error: $e")));
+              } finally {
+                if (mounted) {
+                  setState(() {
+                    _isScanning = false;
+                  });
+                }
+              }
+            },
+            icon: _isScanning 
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Icon(Icons.bluetooth_connected),
+            label: Text(_isScanning ? "Scanning..." : "Pair Device"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary, foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWifiUI() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.grey.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))
+        ],
+      ),
+      child: Column(
+        children: [
+          if (_isScanning)
+            Column(
+              children: [
+                const CircularProgressIndicator(color: AppColors.primary),
+                const SizedBox(height: 20),
+                Text("Scanning network for ESP32...", style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
+              ],
+            )
+          else if (_scanComplete && _discoveredIp != null)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1), 
+                borderRadius: BorderRadius.circular(12), 
+                border: Border.all(color: Colors.green.shade300)
               ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: _startScan,
-                icon: const Icon(Icons.search),
-                label: const Text("Scan Again"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary, foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green.shade600, size: 28),
+                      const SizedBox(width: 10),
+                      Text("Device Found!", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade700, fontSize: 18)),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  Text("IP: $_discoveredIp", style: const TextStyle(color: Colors.black87, fontSize: 15, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 4),
+                  Text("ID: $_discoveredDeviceId", style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                ],
+              ),
+            )
+          else
+            Column(
+              children: [
+                Text(
+                  "Ensure your ESP32 is powered on and connected to the same Wi-Fi network.", 
+                  textAlign: TextAlign.center, 
+                  style: TextStyle(color: Colors.grey.shade600, height: 1.5, fontSize: 14),
                 ),
-              ),
-            ],
-          )
-      ],
+                const SizedBox(height: 25),
+                ElevatedButton.icon(
+                  onPressed: _startScan,
+                  icon: const Icon(Icons.search),
+                  label: const Text("Scan Again"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary, foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildManualUI() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.grey.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("Manual ID Entry", style: TextStyle(color: Colors.grey.shade800, fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 8),
+          Text("Enter your 10-character Device ID exactly as it appears on your device.", style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _deviceIdController,
+            style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2),
+            decoration: InputDecoration(
+              labelText: "Device ID",
+              labelStyle: const TextStyle(letterSpacing: 0),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primary, width: 2)),
+              prefixIcon: const Icon(Icons.numbers, color: AppColors.primary),
+              counterText: "",
+              filled: true,
+              fillColor: Colors.grey.shade50,
+            ),
+            maxLength: 10,
+            onChanged: (val) {
+              setState(() {
+                _isReadyToStart = val.length == 10;
+                if (_isReadyToStart) {
+                   _discoveredDeviceId = val;
+                   _discoveredIp = null; // No IP for manual setup usually, or backend fetches it
+                }
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+          if (_deviceIdController.text.isNotEmpty && _deviceIdController.text.length < 10)
+            const Text("Device ID must be exactly 10 characters", style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w500)),
+          if (_isReadyToStart)
+            const Text("Valid Device ID!", style: TextStyle(color: Colors.green, fontSize: 14, fontWeight: FontWeight.bold)),
+        ],
+      ),
     );
   }
 
@@ -249,7 +492,9 @@ class _SetupScreenState extends State<SetupScreen> {
                   const SizedBox(height: 40),
                   _isLoading 
                   ? const CircularProgressIndicator(color: AppColors.primary)
-                  : ElevatedButton(
+                  : (_currentStep == 3 && !_isReadyToStart)
+                    ? const SizedBox(height: 55) // Hide button if conditions are not met on step 3
+                    : ElevatedButton(
                     onPressed: _nextStep,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,

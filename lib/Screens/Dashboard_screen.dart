@@ -785,50 +785,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Text(
-                    "WEATHER",
-                    style: TextStyle(
-                      color: AppColors.grey,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Text(
+                      "WEATHER",
+                      style: TextStyle(
+                        color: AppColors.grey,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Icon(
-                    Icons.location_on,
-                    size: 12,
-                    color: AppColors.grey,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _service.weatherCity,
-                    style: const TextStyle(
+                    const SizedBox(width: 12),
+                    const Icon(
+                      Icons.location_on,
+                      size: 12,
                       color: AppColors.grey,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _service.weatherCondition,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        _service.weatherCity,
+                        style: const TextStyle(
+                          color: AppColors.grey,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              Text(
-                _service.weatherTemp,
-                style: const TextStyle(color: AppColors.grey, fontSize: 14),
-              ),
-            ],
+                const SizedBox(height: 8),
+                Text(
+                  _service.weatherCondition,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                Text(
+                  _service.weatherTemp,
+                  style: const TextStyle(color: AppColors.grey, fontSize: 14),
+                ),
+              ],
+            ),
           ),
           Image.network(
             iconUrl,

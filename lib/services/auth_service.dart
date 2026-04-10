@@ -73,7 +73,13 @@ class AuthService {
     
     // Check if users/{uid} already exists
     final snapshot = await userRef.get();
-    if (snapshot.exists) return;
+    if (snapshot.exists) {
+      // Check if deviceId exists to skip setup screen across devices
+      if (snapshot.child('deviceId').exists) {
+        await markSetupCompleted(user.uid);
+      }
+      return;
+    }
 
     // Create node if it doesn't exist
     await userRef.set({

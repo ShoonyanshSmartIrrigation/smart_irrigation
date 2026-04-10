@@ -52,10 +52,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.white.withOpacity(0.5), width: 3),
+                        border: Border.all(color: AppColors.white.withValues(alpha: 0.5), width: 3),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.black.withOpacity(0.1),
+                            color: AppColors.black.withValues(alpha: 0.1),
                             blurRadius: 10,
                             spreadRadius: 2,
                           )
@@ -76,7 +76,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      _service.userName,
+                      _service.userName.length > 18 
+                          ? "${_service.userName.substring(0, 18)}..." 
+                          : _service.userName,
                       style: const TextStyle(
                         color: AppColors.white,
                         fontSize: 22,
@@ -87,7 +89,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Text(
                       _service.userEmail,
                       style: TextStyle(
-                        color: AppColors.white.withOpacity(0.8),
+                        color: AppColors.white.withValues(alpha: 0.8),
                         fontSize: 14,
                         fontWeight: FontWeight.w400,
                       ),
@@ -181,7 +183,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 4),
                   Text(
                     "Version 1.0.0",
-                    style: TextStyle(color: AppColors.grey.withOpacity(0.5), fontSize: 12),
+                    style: TextStyle(color: AppColors.grey.withValues(alpha: 0.5), fontSize: 12),
                   ),
                 ],
               ),
@@ -245,7 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           leading: Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
+              color: iconColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: iconColor, size: 22),
