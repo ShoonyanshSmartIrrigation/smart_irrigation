@@ -9,7 +9,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   firebase_database
   flutter_blue_plus_winrt
   flutter_secure_storage_windows
-  geolocator_windows
   permission_handler_windows
 )
 

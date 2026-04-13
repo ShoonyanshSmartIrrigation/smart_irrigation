@@ -3,13 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
-import 'package:permission_handler/permission_handler.dart';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import '../data_manager.dart';
 import 'esp32_service.dart';
 import 'plant_service.dart';
-import 'weather_service.dart';
 
 //-------------------------------------------------------- DashboardStrings Class ----------------------------------------------------------
 class DashboardStrings {
@@ -79,7 +77,6 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
       _prefs = await SharedPreferences.getInstance();
       await loadUserData();
       await checkDeviceConfiguration();
-      await fetchWeatherData();
 
       _setupConnectivityListener();
       _startPeriodicTasks();
@@ -161,22 +158,6 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> fetchWeatherData() async {
-    final data = await WeatherService().fetchWeather();
-    if (data != null && !_isDisposed) {
-      _updateState(() {
-        if (data.containsKey('error')) {
-          weatherCity = data['error'];
-        } else {
-          weatherTemp = "${data['main']['temp'].round()}°C";
-          weatherCondition = data['weather'][0]['main'];
-          weatherIcon = data['weather'][0]['icon'];
-          weatherCity = data['name'] ?? "Unknown City";
-        }
-      });
-    }
-  }
-
   // --- Normal Dashboard Logic ---
   void _setupConnectivityListener() {
     _connectivitySubscription?.cancel();
@@ -218,10 +199,13 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
       bool isConnected = statusMap?['status'] == 'ok';
 
       String lastSeenStr = "";
-      if (statusMap?.containsKey('lastSeen') == true && statusMap!['lastSeen'] != null) {
+      if (statusMap?.containsKey('lastSeen') == true &&
+          statusMap!['lastSeen'] != null) {
         int lastSeen = statusMap['lastSeen'] as int;
         if (lastSeen > 0) {
-          final lastSeenDate = DateTime.fromMillisecondsSinceEpoch(lastSeen * 1000);
+          final lastSeenDate = DateTime.fromMillisecondsSinceEpoch(
+            lastSeen * 1000,
+          );
           final diff = DateTime.now().difference(lastSeenDate);
           if (diff.inMinutes < 1) {
             lastSeenStr = "Just now";

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
+import 'package:go_router/go_router.dart';
+import 'package:smartirrigation/services/WeatherService.dart';
 import '../services/dashboard_service.dart';
 import '../Widgets/build_header.dart';
 import '../Core/theme/app_colors.dart';
@@ -18,6 +20,34 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final DashboardService _service = DashboardService();
 
+  String? village;
+  Map<String, dynamic>? weather;
+  bool loading = false;
+
+  Future<void> updateWeather(StateSetter setState, String name) async {
+    setState(() => loading = true);
+
+    final data = await WeatherService.fetchWeather(name);
+
+    if (data != null) {
+      weather = data;
+    }
+
+    loading = false;
+    setState(() {});
+  }
+
+  Future<void> loadVillage() async {
+    final saved = await VillageService.getVillage();
+
+    if (saved != null) {
+      village = saved;
+      await updateWeather(setState, saved);
+    }
+
+    setState(() {});
+  }
+
   @override
   //-------------------------------------------------------- Init State ----------------------------------------------------------
   void initState() {
@@ -25,6 +55,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _service.onIrrigationComplete = _playAlarm;
     _service.init();
     _service.addListener(_onServiceUpdate);
+    loadVillage();
   }
 
   @override
@@ -149,7 +180,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: ElevatedButton(
                         onPressed: () {
                           _service.setTimerDuration(tempMinutes);
-                          Navigator.pop(context);
+                          context.pop();
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
@@ -205,7 +236,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           TextButton(
             onPressed: () {
               FlutterRingtonePlayer().stop();
-              Navigator.pop(context);
+              context.pop();
             },
             child: const Text("OK"),
           ),
@@ -229,7 +260,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onRefresh: () async {
           _service.loadUserData();
           await _service.checkEspConnection();
-          await _service.fetchWeatherData();
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -256,7 +286,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 20),
                     _buildTimerCard(),
                     const SizedBox(height: 20),
-                    _buildWeatherCard(),
+                    weatherHomeFunction(),
                     const SizedBox(height: 30),
                   ],
                 ),
@@ -766,88 +796,249 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildWeatherCard() {
-    String iconUrl =
-        "https://openweathermap.org/img/wn/${_service.weatherIcon}@2x.png";
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+  Widget weatherHomeFunction() {
+    void openEditDialog(BuildContext context, StateSetter setState) {
+      final controller = TextEditingController(text: village ?? "");
+
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text("Set Village"),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(hintText: "Enter village"),
           ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
+          actions: [
+            TextButton(
+              onPressed: () => context.pop(),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final name = controller.text.trim();
+                if (name.isEmpty) return;
+
+                context.pop();
+
+                await VillageService.saveVillage(name);
+
+                village = name;
+                setState(() {});
+
+                await updateWeather(setState, name);
+              },
+              child: const Text("Save"),
+            ),
+          ],
+        ),
+      );
+    }
+
+    IconData getIcon(String? condition) {
+      switch (condition?.toLowerCase()) {
+        case 'clear':
+          return Icons.wb_sunny_rounded;
+        case 'clouds':
+          return Icons.cloud_rounded;
+        case 'rain':
+        case 'drizzle':
+          return Icons.water_drop_rounded;
+        case 'snow':
+          return Icons.ac_unit_rounded;
+        case 'thunderstorm':
+          return Icons.flash_on_rounded;
+        default:
+          return Icons.cloud_queue_rounded;
+      }
+    }
+
+    Color getColor(String? condition) {
+      switch (condition?.toLowerCase()) {
+        case 'clear':
+          return Colors.orangeAccent;
+        case 'clouds':
+          return Colors.blueGrey;
+        case 'rain':
+        case 'drizzle':
+          return Colors.blue;
+        case 'snow':
+          return Colors.lightBlueAccent;
+        case 'thunderstorm':
+          return Colors.deepPurple;
+        default:
+          return Colors.grey;
+      }
+    }
+
+    Widget detail(IconData icon, String value, String label) {
+      return Expanded(
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: Colors.blue),
+            const SizedBox(width: 6),
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    const Text(
-                      "WEATHER",
-                      style: TextStyle(
-                        color: AppColors.grey,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Icon(
-                      Icons.location_on,
-                      size: 12,
-                      color: AppColors.grey,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        _service.weatherCity,
-                        style: const TextStyle(
-                          color: AppColors.grey,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
                 Text(
-                  _service.weatherCondition,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
+                  value,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                Text(
-                  _service.weatherTemp,
-                  style: const TextStyle(color: AppColors.grey, fontSize: 14),
-                ),
+                Text(label, style: const TextStyle(fontSize: 11)),
               ],
             ),
-          ),
-          Image.network(
-            iconUrl,
-            width: 50,
-            height: 50,
-            errorBuilder: (context, error, stackTrace) => Icon(
-              Icons.wb_sunny_rounded,
-              color: Colors.orange[400],
-              size: 40,
+          ],
+        ),
+      );
+    }
+
+    return StatefulBuilder(
+      builder: (context, setState) {
+        // first load
+
+        final temp = weather?['main']?['temp'];
+        final humidity = weather?['main']?['humidity'];
+        final pressure = weather?['main']?['pressure'];
+        final feelsLike = weather?['main']?['feels_like'];
+        final windSpeed = weather?['wind']?['speed'];
+
+        String? condition;
+        String? description;
+
+        if (weather != null &&
+            weather!['weather'] != null &&
+            weather!['weather'].isNotEmpty) {
+          condition = weather!['weather'][0]?['main']?.toString();
+          description = weather!['weather'][0]?['description']?.toString();
+        }
+
+        description ??= condition ?? "--";
+
+        return Container(
+          width: double.infinity,
+
+          color: Colors.grey.shade100,
+          child: Center(
+            child: Card(
+              color: Colors.white,
+              elevation: 8,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: village == null
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.location_off,
+                            color: Colors.red,
+                            size: 40,
+                          ),
+                          const SizedBox(height: 10),
+                          const Text("No Village Selected"),
+                          const SizedBox(height: 10),
+                          ElevatedButton(
+                            onPressed: () => openEditDialog(context, setState),
+                            child: const Text("Set Village"),
+                          ),
+                        ],
+                      )
+                    : loading
+                    ? const CircularProgressIndicator()
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // HEADER
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                village ?? "",
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.edit),
+                                onPressed: () =>
+                                    openEditDialog(context, setState),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 10),
+
+                          // TEMP
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                getIcon(condition),
+                                size: 50,
+                                color: getColor(condition),
+                              ),
+                              const SizedBox(width: 10),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    temp != null
+                                        ? "${(temp as num).round()}°C"
+                                        : "--",
+                                    style: const TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(description.toUpperCase()),
+                                ],
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // DETAILS
+                          Row(
+                            children: [
+                              detail(
+                                Icons.water_drop,
+                                "${humidity ?? '--'}%",
+                                "Humidity",
+                              ),
+                              detail(
+                                Icons.air,
+                                "${windSpeed ?? '--'} m/s",
+                                "Wind",
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              detail(
+                                Icons.speed,
+                                "${pressure ?? '--'} hPa",
+                                "Pressure",
+                              ),
+                              detail(
+                                Icons.thermostat,
+                                feelsLike != null
+                                    ? "${(feelsLike as num).round()}°C"
+                                    : "--",
+                                "Feels Like",
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+              ),
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
