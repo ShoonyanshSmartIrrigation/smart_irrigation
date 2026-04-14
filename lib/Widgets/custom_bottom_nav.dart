@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../Core/theme/app_colors.dart';
 
 //-------------------------------------------------------- CustomBottomNavBar Class ----------------------------------------------------------
 class CustomBottomNavBar extends StatelessWidget {
@@ -16,11 +17,12 @@ class CustomBottomNavBar extends StatelessWidget {
     //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
     const double barHeight = 70;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       height: barHeight,
       decoration: BoxDecoration(
-        color: const Color(0xFFF4F7F5),
+        color: isDark ? Theme.of(context).cardColor : const Color(0xFFF4F7F5),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(30),
           topRight: Radius.circular(30),
@@ -105,7 +107,7 @@ class NavItem extends StatelessWidget {
     const double iconSize = 18;
     const double fontSize = 9;
 
-    // ✅ State Safety: Validate index
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final bool isActive = currentIndex == index && currentIndex >= 0;
 
     return Expanded(
@@ -120,14 +122,13 @@ class NavItem extends StatelessWidget {
             width: 90,
             height: 50,
             decoration: BoxDecoration(
-              color: isActive ? const Color(0xFF2E7D32) : Colors.transparent,
+              color: isActive ? AppColors.primary : Colors.transparent,
               borderRadius: BorderRadius.circular(30),
             ),
             child: Material(
               color: Colors.transparent,
               child: InkWell(
                 onTap: () {
-                  // ✅ Haptic Feedback
                   HapticFeedback.lightImpact();
                   onTap(index);
                 },
@@ -140,7 +141,7 @@ class NavItem extends StatelessWidget {
                   children: [
                     Icon(
                       icon,
-                      color: isActive ? Colors.white : const Color(0xFF78909C),
+                      color: isActive ? Colors.white : (isDark ? Colors.white70 : const Color(0xFF78909C)),
                       size: iconSize,
                     ),
                     const SizedBox(height: 2),
@@ -148,7 +149,7 @@ class NavItem extends StatelessWidget {
                       label.toUpperCase(),
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: isActive ? Colors.white : const Color(0xFF78909C),
+                        color: isActive ? Colors.white : (isDark ? Colors.white70 : const Color(0xFF78909C)),
                         fontWeight: FontWeight.w800,
                         fontSize: fontSize,
                         letterSpacing: 0.5,

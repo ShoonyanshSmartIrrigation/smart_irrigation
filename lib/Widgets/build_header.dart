@@ -24,33 +24,31 @@ class BuildHeader extends StatelessWidget {
       bottomRight: Radius.circular(30),
     );
 
-    return SizedBox(
+    return Container(
       width: double.infinity,
       height: height ?? defaultHeaderHeight,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF2E7D32), Color(0xFF1B5E20)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: borderRadius,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black26,
-              blurRadius: 12,
-              offset: Offset(0, 4),
-            )
-          ],
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF2E7D32), Color(0xFF1B5E20)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: ClipRRect(
-          borderRadius: borderRadius,
-          child: Padding(
-            padding: padding ?? const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: SafeArea(
-              bottom: false,
-              child: child,
-            ),
+        borderRadius: borderRadius,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          )
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: Padding(
+          padding: padding ?? const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: SafeArea(
+            bottom: false,
+            child: child,
           ),
         ),
       ),

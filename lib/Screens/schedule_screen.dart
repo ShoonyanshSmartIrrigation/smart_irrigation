@@ -100,6 +100,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   void _showScheduleSheet({WateringSchedule? schedule}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     String title = schedule?.title ?? "";
     String frequency = schedule?.frequency ?? "Daily";
     int duration = schedule?.durationInMinutes ?? 10;
@@ -118,9 +119,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             left: 20,
             right: 20,
           ),
-          decoration: const BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.only(
+          decoration: BoxDecoration(
+            color: isDark ? Theme.of(context).cardColor : AppColors.white,
+            borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(30),
               topRight: Radius.circular(30),
             ),
@@ -134,7 +135,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   child: Container(
                     width: 40,
                     height: 4,
-                    decoration: const BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.all(Radius.circular(10))),
+                    decoration: BoxDecoration(color: isDark ? Colors.white24 : Colors.black12, borderRadius: const BorderRadius.all(Radius.circular(10))),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -142,7 +143,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(schedule == null ? "Add New Schedule" : "Edit Schedule",
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.scheduleTextDark)),
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppColors.scheduleTextDark)),
                     if (schedule != null)
                       IconButton(
                         icon: const Icon(Icons.delete_outline_rounded, color: AppColors.scheduleDeleteIcon),
@@ -154,9 +155,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                const Text(
+                Text(
                   "Set the time and frequency for automated watering. Multiple schedules can be active.",
-                  style: TextStyle(fontSize: 12, color: AppColors.grey, fontWeight: FontWeight.w500),
+                  style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : AppColors.grey, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 15),
                 TextFormField(
@@ -216,11 +217,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         width: 45,
                         height: 45,
                         decoration: BoxDecoration(
-                          color: isSelected ? AppColors.primary : Colors.grey[200],
+                          color: isSelected ? AppColors.primary : (isDark ? Colors.white10 : Colors.grey[200]),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Center(
-                          child: Text("$motorNum", style: TextStyle(color: isSelected ? AppColors.white : AppColors.black87, fontWeight: FontWeight.bold)),
+                          child: Text("$motorNum", style: TextStyle(color: isSelected ? AppColors.white : (isDark ? Colors.white70 : AppColors.black87), fontWeight: FontWeight.bold)),
                         ),
                       ),
                     );
@@ -317,8 +318,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   @override
     //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: isDark ? null : AppColors.background,
       body: RefreshIndicator(
         onRefresh: _refreshSchedules,
         child: SingleChildScrollView(
@@ -413,11 +415,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Widget _buildScheduleCard(WateringSchedule schedule) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.cardBackground,
+        color: isDark ? Theme.of(context).cardColor : AppColors.cardBackground,
         borderRadius: BorderRadius.circular(20),
+        border: isDark ? Border.all(color: Colors.white24, width: 1) : null,
         boxShadow: [BoxShadow(color: AppColors.scheduleShadow, blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Padding(

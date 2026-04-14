@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../services/settings_service.dart';
+import '../services/theme_service.dart';
 import '../Widgets/build_header.dart';
 import '../Core/theme/app_colors.dart';
 
@@ -38,8 +39,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
     //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
+    final themeService = ThemeService();
+    final isDark = themeService.isDarkMode;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: isDark ? null : AppColors.background,
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -101,6 +105,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const SizedBox(height: 10),
             
+            _buildSectionHeader("Appearance"),
+            _buildSettingsGroup([
+              ListenableBuilder(
+                listenable: themeService,
+                builder: (context, _) => SwitchListTile(
+                  secondary: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      themeService.isDarkMode ? Icons.dark_mode : Icons.light_mode,
+                      color: AppColors.primary,
+                      size: 22,
+                    ),
+                  ),
+                  title: const Text(
+                    "Dark Mode",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                  subtitle: Text(
+                    themeService.isDarkMode ? "Enabled" : "Disabled",
+                    style: TextStyle(color: AppColors.settingsSubtitleGrey, fontSize: 13),
+                  ),
+                  activeColor: AppColors.primary,
+                  value: themeService.isDarkMode,
+                  onChanged: (value) {
+                    themeService.toggleTheme(value);
+                  },
+                ),
+              ),
+            ]),
+
             _buildSectionHeader("System Configuration"),
             _buildSettingsGroup([
               _buildSettingItem(
@@ -175,11 +216,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildSettingsGroup(List<Widget> items) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
       decoration: BoxDecoration(
-        color: AppColors.cardBackground,
+        color: isDark ? Theme.of(context).cardColor : AppColors.cardBackground,
         borderRadius: BorderRadius.circular(20),
+        border: isDark ? Border.all(color: Colors.white24, width: 1) : null,
         boxShadow: [
           BoxShadow(
             color: AppColors.settingsShadow,
@@ -203,6 +246,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     bool showDivider = true,
     Color? textColor,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       children: [
         ListTile(
@@ -221,7 +265,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 15,
-              color: textColor ?? AppColors.black87,
+              color: textColor ?? (isDark ? null : AppColors.black87),
             ),
           ),
           subtitle: Text(

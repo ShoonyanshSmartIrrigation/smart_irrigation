@@ -197,8 +197,9 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
     //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: AppColors.signupBackground,
+      backgroundColor: isDark ? null : AppColors.signupBackground,
       resizeToAvoidBottomInset: true,
       body: SingleChildScrollView(
         child: Column(
@@ -343,14 +344,14 @@ class _SignupScreenState extends State<SignupScreen> {
 
                     const SizedBox(height: 25),
                     
-                    const Row(
+                    Row(
                       children: [
-                        Expanded(child: Divider()),
+                        const Expanded(child: Divider()),
                         Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16),
-                          child: Text("OR JOIN WITH", style: TextStyle(color: AppColors.signupTextGrey, fontSize: 12, fontWeight: FontWeight.bold)),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text("OR JOIN WITH", style: TextStyle(color: isDark ? Colors.white54 : AppColors.signupTextGrey, fontSize: 12, fontWeight: FontWeight.bold)),
                         ),
-                        Expanded(child: Divider()),
+                        const Expanded(child: Divider()),
                       ],
                     ),
 
@@ -362,12 +363,12 @@ class _SignupScreenState extends State<SignupScreen> {
                       onPressed: _isSignupLoading ? null : handleGoogleSignIn,
                       style: ElevatedButton.styleFrom(
                         splashFactory: NoSplash.splashFactory,
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black87,
+                        backgroundColor: isDark ? Theme.of(context).cardColor : Colors.white,
+                        foregroundColor: isDark ? Colors.white : Colors.black87,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(30),
-                          side: BorderSide(color: Colors.grey.shade200, width: 1.5),
+                          side: BorderSide(color: isDark ? Colors.white10 : Colors.grey.shade200, width: 1.5),
                         ),
                         elevation: 2,
                         shadowColor: Colors.black.withOpacity(0.05),
@@ -399,13 +400,13 @@ class _SignupScreenState extends State<SignupScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text("Already have an account? ", style: TextStyle(color: AppColors.signupTextGrey)),
+                        Text("Already have an account? ", style: TextStyle(color: isDark ? Colors.white54 : AppColors.signupTextGrey)),
                         TextButton(
                           onPressed: () => context.pop(),
                           style: ButtonStyle(
                             overlayColor: WidgetStateProperty.all(Colors.transparent),
                           ),
-                          child: const Text('Login', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                          child: Text('Login', style: TextStyle(color: isDark ? Colors.white : AppColors.primary, fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
@@ -435,6 +436,7 @@ class _SignupScreenState extends State<SignupScreen> {
     List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator}
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return FormField<String>(
       initialValue: controller.text,
       validator: validator,
@@ -445,7 +447,7 @@ class _SignupScreenState extends State<SignupScreen> {
           children: [
             Container(
               decoration: BoxDecoration(
-                color: AppColors.signupTextFieldBg,
+                color: isDark ? Theme.of(context).cardColor : AppColors.signupTextFieldBg,
                 borderRadius: BorderRadius.circular(15),
                 boxShadow: const [
                   BoxShadow(
@@ -475,11 +477,11 @@ class _SignupScreenState extends State<SignupScreen> {
                 style: const TextStyle(fontWeight: FontWeight.w500),
                 decoration: InputDecoration(
                   labelText: label,
-                  labelStyle: const TextStyle(color: AppColors.signupTextGrey, fontSize: 14),
+                  labelStyle: TextStyle(color: isDark ? Colors.white54 : AppColors.signupTextGrey, fontSize: 14),
                   prefixIcon: Icon(icon, color: AppColors.primary, size: 22),
                   suffixIcon: isPassword 
                     ? IconButton(
-                        icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility, color: AppColors.grey),
+                        icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility, color: isDark ? Colors.white54 : AppColors.grey),
                         onPressed: onTogglePassword,
                         splashColor: Colors.transparent,
                         highlightColor: Colors.transparent,
@@ -491,7 +493,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     borderSide: BorderSide.none,
                   ),
                   filled: true,
-                  fillColor: AppColors.signupTextFieldBg,
+                  fillColor: isDark ? Colors.transparent : AppColors.signupTextFieldBg,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                 ),
               ),

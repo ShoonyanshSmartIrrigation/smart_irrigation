@@ -28,8 +28,6 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
     //-------------------------------------------------------- Dispose Method ----------------------------------------------------------
   void dispose() {
     _service.removeListener(_onServiceUpdate);
-    // ✅ Do NOT call _service.dispose() here because PlantService is a Singleton.
-    // Disposing it here would prevent it from being used again when the screen is rebuilt.
     super.dispose();
   }
 
@@ -43,9 +41,10 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
     final plants = _service.getPlants();
     final totalMotors = plants.length;
     final activeMotors = _service.getActiveMotors();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: isDark ? null : AppColors.background,
       floatingActionButton: FloatingActionButton(
         heroTag: 'plant_settings_fab',
         backgroundColor: AppColors.primary,
@@ -81,6 +80,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
   }
 
   Widget _buildStatsHeader(int totalMotors, int activeMotors) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -118,7 +118,11 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
           child: Card(
             elevation: 8,
             shadowColor: Colors.black12,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            color: isDark ? Theme.of(context).cardColor : AppColors.cardBackground,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+              side: isDark ? const BorderSide(color: Colors.white24, width: 1) : BorderSide.none,
+            ),
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -153,6 +157,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
   }
 
   Widget _buildPlantCard(Plant plant) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     bool hasError = _service.plantConnectionErrors[plant.id] ?? false;
     Color moistureColor = plant.moistureLevel < 30 
         ? AppColors.plantControlMoistureLow 
@@ -161,11 +166,11 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       decoration: BoxDecoration(
-        color: AppColors.cardBackground,
+        color: isDark ? Theme.of(context).cardColor : AppColors.cardBackground,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: hasError ? AppColors.plantControlError : Colors.transparent,
-          width: 2,
+          color: hasError ? AppColors.plantControlError : (isDark ? Colors.white24 : Colors.transparent),
+          width: hasError ? 2 : (isDark ? 1 : 0),
         ),
         boxShadow: [
           BoxShadow(
@@ -186,11 +191,11 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                 CircleAvatar(
                   backgroundColor: hasError
                       ? AppColors.plantControlError.withValues(alpha: 0.1)
-                      : (plant.isMotorOn ? AppColors.plantControlIconBg : AppColors.background),
+                      : (plant.isMotorOn ? AppColors.plantControlIconBg : (isDark ? Colors.white10 : AppColors.background)),
                   radius: 18,
                   child: Icon(
                     hasError ? Icons.wifi_off_rounded : Icons.grass,
-                    color: hasError ? AppColors.plantControlError : (plant.isMotorOn ? AppColors.primary : AppColors.grey),
+                    color: hasError ? AppColors.plantControlError : (plant.isMotorOn ? AppColors.primary : (isDark ? Colors.white54 : AppColors.grey)),
                     size: 18,
                   ),
                 ),

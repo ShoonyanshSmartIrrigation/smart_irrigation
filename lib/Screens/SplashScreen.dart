@@ -63,6 +63,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
     //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
+    // Splash screen remains constant regardless of theme mode
     return Scaffold(
       backgroundColor: AppColors.splashBackground,
       body: Stack(

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../Widgets/custom_bottom_nav.dart';
-import '../Core/theme/app_colors.dart';
 
 //-------------------------------------------------------- MainScreen Class ----------------------------------------------------------
 class MainScreen extends StatelessWidget {
@@ -27,11 +26,13 @@ class MainScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
         body: Container(
-          color: AppColors.background,
+          color: isDark ? Theme.of(context).scaffoldBackgroundColor : const Color(0xFFF4F7F5),
           child: navigationShell,
         ),
         bottomNavigationBar: CustomBottomNavBar(

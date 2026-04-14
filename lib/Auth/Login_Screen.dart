@@ -129,8 +129,9 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
     //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: AppColors.loginBackground,
+      backgroundColor: isDark ? null : AppColors.loginBackground,
       resizeToAvoidBottomInset: true,
       body: SingleChildScrollView(
         child: Column(
@@ -174,12 +175,12 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
+                  Text(
                     "Login to your account",
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
+                      color: isDark ? Colors.white : AppColors.primary,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -214,10 +215,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: ButtonStyle(
                         overlayColor: WidgetStateProperty.all(Colors.transparent),
                       ),
-                      child: const Text(
+                      child: Text(
                         "Forgot Password?",
                         style: TextStyle(
-                          color: AppColors.primary,
+                          color: isDark ? Colors.white70 : AppColors.primary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -254,7 +255,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const Expanded(child: Divider()),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text("OR CONNECT WITH", style: const TextStyle(color: AppColors.loginTextGrey, fontSize: 12, fontWeight: FontWeight.bold)),
+                        child: Text("OR CONNECT WITH", style: TextStyle(color: isDark ? Colors.white54 : AppColors.loginTextGrey, fontSize: 12, fontWeight: FontWeight.bold)),
                       ),
                       const Expanded(child: Divider()),
                     ],
@@ -268,12 +269,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: _isLoginLoading ? null : handleGoogleSignIn,
                     style: ElevatedButton.styleFrom(
                       splashFactory: NoSplash.splashFactory,
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black87,
+                      backgroundColor: isDark ? Theme.of(context).cardColor : Colors.white,
+                      foregroundColor: isDark ? Colors.white : Colors.black87,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),
-                        side: BorderSide(color: Colors.grey.shade200, width: 1.5),
+                        side: BorderSide(color: isDark ? Colors.white10 : Colors.grey.shade200, width: 1.5),
                       ),
                       elevation: 2,
                       shadowColor: Colors.black.withOpacity(0.05),
@@ -305,13 +306,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text("Don't have an account?", style: TextStyle(color: AppColors.loginTextGrey)),
+                      Text("Don't have an account?", style: TextStyle(color: isDark ? Colors.white54 : AppColors.loginTextGrey)),
                       TextButton(
                         onPressed: () => context.push(AppRoutes.signup),
                         style: ButtonStyle(
                           overlayColor: WidgetStateProperty.all(Colors.transparent),
                         ),
-                        child: const Text('Sign Up', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                        child: Text('Sign Up', style: TextStyle(color: isDark ? Colors.white : AppColors.primary, fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
@@ -334,9 +335,10 @@ class _LoginScreenState extends State<LoginScreen> {
     Iterable<String>? autofillHints,
     VoidCallback? onTogglePassword}
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.loginTextFieldBg,
+        color: isDark ? Theme.of(context).cardColor : AppColors.loginTextFieldBg,
         borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
@@ -354,11 +356,11 @@ class _LoginScreenState extends State<LoginScreen> {
         style: const TextStyle(fontWeight: FontWeight.w500),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(color: AppColors.loginTextGrey, fontSize: 14),
+          labelStyle: TextStyle(color: isDark ? Colors.white54 : AppColors.loginTextGrey, fontSize: 14),
           prefixIcon: Icon(icon, color: AppColors.primary, size: 22),
           suffixIcon: isPassword
             ? IconButton(
-                icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility, color: AppColors.grey),
+                icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility, color: isDark ? Colors.white54 : AppColors.grey),
                 onPressed: onTogglePassword,
                 splashColor: Colors.transparent,
                 highlightColor: Colors.transparent,
@@ -370,7 +372,7 @@ class _LoginScreenState extends State<LoginScreen> {
             borderSide: BorderSide.none,
           ),
           filled: true,
-          fillColor: AppColors.loginTextFieldBg,
+          fillColor: isDark ? Colors.transparent : AppColors.loginTextFieldBg,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       ),
@@ -442,8 +444,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: AppColors.loginBackground,
+      backgroundColor: isDark ? null : AppColors.loginBackground,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(220),
         child: AppBar(
@@ -489,21 +492,21 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
+                  Text(
                     "Reset Your Password",
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.primary),
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppColors.primary),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 10),
-                  const Text(
+                  Text(
                     "Enter your email address and we will send you a link to reset your password.",
-                    style: TextStyle(fontSize: 14, color: AppColors.loginTextGrey),
+                    style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : AppColors.loginTextGrey),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 40),
                   Container(
                     decoration: BoxDecoration(
-                      color: AppColors.loginTextFieldBg,
+                      color: isDark ? Theme.of(context).cardColor : AppColors.loginTextFieldBg,
                       borderRadius: BorderRadius.circular(15),
                       boxShadow: [
                         BoxShadow(
@@ -520,14 +523,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       style: const TextStyle(fontWeight: FontWeight.w500),
                       decoration: InputDecoration(
                         labelText: "Email Address",
-                        labelStyle: const TextStyle(color: AppColors.loginTextGrey, fontSize: 14),
+                        labelStyle: TextStyle(color: isDark ? Colors.white54 : AppColors.loginTextGrey, fontSize: 14),
                         prefixIcon: const Icon(Icons.email_outlined, color: AppColors.primary, size: 22),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(15),
                           borderSide: BorderSide.none,
                         ),
                         filled: true,
-                        fillColor: AppColors.loginTextFieldBg,
+                        fillColor: isDark ? Colors.transparent : AppColors.loginTextFieldBg,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                       ),
                     ),

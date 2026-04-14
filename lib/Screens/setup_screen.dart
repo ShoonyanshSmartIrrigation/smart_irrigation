@@ -127,6 +127,7 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Widget _buildScannerStep() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -145,7 +146,7 @@ class _SetupScreenState extends State<SetupScreen> {
           const SizedBox(height: 24),
           const Text("Connect Sprinkler", style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.primary)),
           const SizedBox(height: 8),
-          Text("Choose how to connect your device", style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
+          Text("Choose how to connect your device", style: TextStyle(color: isDark ? Colors.white70 : Colors.grey.shade600, fontSize: 16)),
           const SizedBox(height: 35),
           
           Row(
@@ -174,6 +175,7 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Widget _buildMethodCard(int index, IconData icon, String title) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     bool isSelected = _selectedMethodIndex == index;
     return GestureDetector(
       onTap: () {
@@ -195,7 +197,7 @@ class _SetupScreenState extends State<SetupScreen> {
         height: 110,
         padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 8),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : Colors.white,
+          color: isSelected ? AppColors.primary : (isDark ? Theme.of(context).cardColor : Colors.white),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -205,19 +207,19 @@ class _SetupScreenState extends State<SetupScreen> {
             ),
           ],
           border: Border.all(
-            color: isSelected ? AppColors.primary : Colors.grey.shade200,
+            color: isSelected ? AppColors.primary : (isDark ? Colors.white10 : Colors.grey.shade200),
             width: 2,
           ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: isSelected ? Colors.white : Colors.grey.shade500, size: 32),
+            Icon(icon, color: isSelected ? Colors.white : (isDark ? Colors.white54 : Colors.grey.shade500), size: 32),
             const SizedBox(height: 12),
             Text(
               title, 
               style: TextStyle(
-                color: isSelected ? Colors.white : Colors.grey.shade700, 
+                color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.grey.shade700), 
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w600, 
                 fontSize: 13,
               ), 
@@ -230,10 +232,11 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Widget _buildBluetoothUI() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? Theme.of(context).cardColor : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(color: Colors.grey.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))
@@ -244,7 +247,7 @@ class _SetupScreenState extends State<SetupScreen> {
           Text(
             "Ensure your device is nearby. We will connect to ESP32_IRRIGATION.", 
             textAlign: TextAlign.center, 
-            style: TextStyle(color: Colors.grey.shade600, height: 1.5, fontSize: 14),
+            style: TextStyle(color: isDark ? Colors.white70 : Colors.grey.shade600, height: 1.5, fontSize: 14),
           ),
           const SizedBox(height: 25),
           ElevatedButton.icon(
@@ -310,10 +313,11 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Widget _buildWifiUI() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? Theme.of(context).cardColor : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(color: Colors.grey.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))
@@ -326,7 +330,7 @@ class _SetupScreenState extends State<SetupScreen> {
               children: [
                 const CircularProgressIndicator(color: AppColors.primary),
                 const SizedBox(height: 20),
-                Text("Scanning network for ESP32...", style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
+                Text("Scanning network for ESP32...", style: TextStyle(color: isDark ? Colors.white70 : Colors.grey.shade600, fontSize: 16)),
               ],
             )
           else if (_scanComplete && _discoveredIp != null)
@@ -348,9 +352,9 @@ class _SetupScreenState extends State<SetupScreen> {
                     ],
                   ),
                   const SizedBox(height: 15),
-                  Text("IP: $_discoveredIp", style: const TextStyle(color: Colors.black87, fontSize: 15, fontWeight: FontWeight.w500)),
+                  Text("IP: $_discoveredIp", style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 15, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 4),
-                  Text("ID: $_discoveredDeviceId", style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                  Text("ID: $_discoveredDeviceId", style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 13)),
                 ],
               ),
             )
@@ -360,7 +364,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 Text(
                   "Ensure your ESP32 is powered on and connected to the same Wi-Fi network.", 
                   textAlign: TextAlign.center, 
-                  style: TextStyle(color: Colors.grey.shade600, height: 1.5, fontSize: 14),
+                  style: TextStyle(color: isDark ? Colors.white70 : Colors.grey.shade600, height: 1.5, fontSize: 14),
                 ),
                 const SizedBox(height: 25),
                 ElevatedButton.icon(
@@ -381,10 +385,11 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Widget _buildManualUI() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? Theme.of(context).cardColor : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(color: Colors.grey.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))
@@ -393,9 +398,9 @@ class _SetupScreenState extends State<SetupScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("Manual ID Entry", style: TextStyle(color: Colors.grey.shade800, fontWeight: FontWeight.bold, fontSize: 16)),
+          Text("Manual ID Entry", style: TextStyle(color: isDark ? Colors.white : Colors.grey.shade800, fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 8),
-          Text("Enter your 10-character Device ID exactly as it appears on your device.", style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+          Text("Enter your 10-character Device ID exactly as it appears on your device.", style: TextStyle(color: isDark ? Colors.white70 : Colors.grey.shade600, fontSize: 13)),
           const SizedBox(height: 20),
           TextField(
             controller: _deviceIdController,
@@ -408,7 +413,7 @@ class _SetupScreenState extends State<SetupScreen> {
               prefixIcon: const Icon(Icons.numbers, color: AppColors.primary),
               counterText: "",
               filled: true,
-              fillColor: Colors.grey.shade50,
+              fillColor: isDark ? Colors.white10 : Colors.grey.shade50,
             ),
             maxLength: 10,
             onChanged: (val) {
@@ -433,6 +438,7 @@ class _SetupScreenState extends State<SetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     List<Map<String, dynamic>> steps = [
       {
         'title': 'Welcome to Smart Irrigation',
@@ -457,7 +463,7 @@ class _SetupScreenState extends State<SetupScreen> {
     ];
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: isDark ? Theme.of(context).scaffoldBackgroundColor : Colors.white,
       body: SafeArea(
         child: Column(
           children: [
@@ -483,7 +489,7 @@ class _SetupScreenState extends State<SetupScreen> {
                         height: 10,
                         width: _currentStep == index ? 25 : 10,
                         decoration: BoxDecoration(
-                          color: _currentStep == index ? AppColors.primary : Colors.grey.shade300,
+                          color: _currentStep == index ? AppColors.primary : (isDark ? Colors.white24 : Colors.grey.shade300),
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),

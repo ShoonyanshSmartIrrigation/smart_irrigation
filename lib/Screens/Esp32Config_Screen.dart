@@ -74,8 +74,9 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
   @override
     //-------------------------------------------------------- Build Method ----------------------------------------------------------
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: isDark ? null : AppColors.background,
       appBar: AppBar(
         title: const Text("ESP32 Auto Connect", style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
@@ -93,16 +94,16 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
               Text(
                 status,
                 style: TextStyle(
-                  fontSize: 24, 
-                  fontWeight: FontWeight.bold, 
-                  color: status == "Connected" ? AppColors.esp32Success : AppColors.black87
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: status == "Connected" ? AppColors.esp32Success : (isDark ? Colors.white : AppColors.black87)
                 ),
               ),
               const SizedBox(height: 15),
               Text(
                 result,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16, color: AppColors.esp32TextGrey),
+                style: TextStyle(fontSize: 16, color: isDark ? Colors.white70 : AppColors.esp32TextGrey),
               ),
               if (discoveredIp != null) ...[
                 const SizedBox(height: 10),

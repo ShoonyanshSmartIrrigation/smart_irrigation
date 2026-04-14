@@ -4,13 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-void main() {
-  runApp(const MaterialApp(
-    debugShowCheckedModeBanner: false,
-    home: BleTestScreen(),
-  ));
-}
-
 class BleTestScreen extends StatefulWidget {
   const BleTestScreen({super.key});
 
@@ -46,7 +39,6 @@ class _BleTestScreenState extends State<BleTestScreen> {
     FlutterBluePlus.scanResults.listen((results) {
       if (mounted) {
         setState(() {
-          // Filter only devices that contain "ESP" in their name
           _scanResults = results
               .where((r) {
                 final name = r.device.platformName.isNotEmpty 
@@ -61,7 +53,6 @@ class _BleTestScreenState extends State<BleTestScreen> {
   }
 
   Future<void> _startScan() async {
-    // Check permissions
     if (await Permission.bluetoothScan.request().isGranted &&
         await Permission.bluetoothConnect.request().isGranted &&
         await Permission.location.request().isGranted) {
@@ -84,8 +75,6 @@ class _BleTestScreenState extends State<BleTestScreen> {
   Future<void> _connect(BluetoothDevice device) async {
     setState(() => _status = "Connecting to ${device.platformName}...");
     try {
-      // The 'license' parameter is required in your project's version of flutter_blue_plus.
-      // Based on bluetooth_connection.dart, 'License.free' is the expected value.
       await device.connect(
         timeout: const Duration(seconds: 10),
         license: License.free,
@@ -118,7 +107,6 @@ class _BleTestScreenState extends State<BleTestScreen> {
         setState(() => _status = "Connected, but Service/Char not found");
       } else {
         setState(() => _status = "Connected & Ready");
-        // Request initial status
         _sendCommand("STATUS");
       }
     } catch (e) {
@@ -144,9 +132,7 @@ class _BleTestScreenState extends State<BleTestScreen> {
           _motorStates[i] = "OFF";
         }
       }
-    } catch (e) {
-      // Ignore parse errors
-    }
+    } catch (e) {}
   }
 
   Future<void> _sendCommand(String command) async {
@@ -177,7 +163,9 @@ class _BleTestScreenState extends State<BleTestScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
+      backgroundColor: isDark ? null : Colors.white,
       appBar: AppBar(
         title: const Text("ESP32 BLE Tester"),
         backgroundColor: Colors.blueAccent,
@@ -191,7 +179,7 @@ class _BleTestScreenState extends State<BleTestScreen> {
         children: [
           Container(
             padding: const EdgeInsets.all(12),
-            color: Colors.blue.shade50,
+            color: isDark ? Colors.blue.withOpacity(0.1) : Colors.blue.shade50,
             width: double.infinity,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -212,11 +200,12 @@ class _BleTestScreenState extends State<BleTestScreen> {
   }
 
   Widget _buildScanner() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       children: [
-        const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text("Searching for ESP Devices...", style: TextStyle(fontStyle: FontStyle.italic)),
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text("Searching for ESP Devices...", style: TextStyle(fontStyle: FontStyle.italic, color: isDark ? Colors.white70 : Colors.black87)),
         ),
         ElevatedButton.icon(
           onPressed: _isScanning ? null : _startScan,
@@ -233,10 +222,11 @@ class _BleTestScreenState extends State<BleTestScreen> {
               final name = r.device.platformName.isEmpty ? r.advertisementData.advName : r.device.platformName;
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                color: isDark ? Theme.of(context).cardColor : Colors.white,
                 child: ListTile(
                   leading: const Icon(Icons.bluetooth, color: Colors.blue),
-                  title: Text(name.isEmpty ? "Unknown Device" : name),
-                  subtitle: Text(r.device.remoteId.toString()),
+                  title: Text(name.isEmpty ? "Unknown Device" : name, style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+                  subtitle: Text(r.device.remoteId.toString(), style: TextStyle(color: isDark ? Colors.white54 : Colors.black54)),
                   trailing: ElevatedButton(
                     onPressed: () => _connect(r.device),
                     child: const Text("Connect"),
@@ -251,6 +241,7 @@ class _BleTestScreenState extends State<BleTestScreen> {
   }
 
   Widget _buildControls() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -301,10 +292,10 @@ class _BleTestScreenState extends State<BleTestScreen> {
               bool isOn = state == "ON";
               return Card(
                 elevation: isOn ? 4 : 1,
-                color: isOn ? Colors.green.shade50 : Colors.grey.shade100,
+                color: isOn ? Colors.green.withOpacity(0.1) : (isDark ? Colors.white10 : Colors.grey.shade100),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: isOn ? Colors.green : Colors.grey.shade400, width: 2),
+                  side: BorderSide(color: isOn ? Colors.green : (isDark ? Colors.white24 : Colors.grey.shade400), width: 2),
                 ),
                 child: InkWell(
                   onTap: () => _sendCommand("${isOn ? "OFF" : "ON"}:$index"),
@@ -316,7 +307,7 @@ class _BleTestScreenState extends State<BleTestScreen> {
                       const SizedBox(height: 4),
                       Icon(isOn ? Icons.power : Icons.power_off, color: isOn ? Colors.green : Colors.grey),
                       const SizedBox(height: 4),
-                      Text(state, style: TextStyle(color: isOn ? Colors.green.shade700 : Colors.grey, fontWeight: FontWeight.bold)),
+                      Text(state, style: TextStyle(color: isOn ? Colors.green : Colors.grey, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
@@ -329,7 +320,7 @@ class _BleTestScreenState extends State<BleTestScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.grey.shade900,
+              color: Colors.black,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
