@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/setup_logic.dart';
 import '../services/esp32_service.dart';
-import '../Core/theme/app_colors.dart';
+import '../core/theme/app_colors.dart';
 import '../bluetooth_connection.dart';
 
 class SetupScreen extends StatefulWidget {

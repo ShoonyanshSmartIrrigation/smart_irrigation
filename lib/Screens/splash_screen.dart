@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:go_router/go_router.dart';
-import '../Routes/app_routes.dart';
-import '../Core/theme/app_colors.dart';
+import '../routes/app_routes.dart';
+import '../core/theme/app_colors.dart';
 
 //-------------------------------------------------------- SplashScreen Class ----------------------------------------------------------
 class SplashScreen extends StatefulWidget {

@@ -4,7 +4,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
 import '../services/auth_service.dart';
-import '../Routes/app_routes.dart';
+import '../routes/app_routes.dart';
 
 class SetupLogic {
   final AuthService _authService = AuthService();

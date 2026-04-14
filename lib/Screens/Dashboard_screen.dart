@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:go_router/go_router.dart';
 import '../services/dashboard_service.dart';
-import '../Widgets/build_header.dart';
-import '../Core/theme/app_colors.dart';
+import '../widgets/build_header.dart';
+import '../core/theme/app_colors.dart';
 import '../services/weather_service.dart';
 
 //-------------------------------------------------------- DashboardScreen Class ----------------------------------------------------------

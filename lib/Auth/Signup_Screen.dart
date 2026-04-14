@@ -5,9 +5,9 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import '../services/auth_service.dart';
-import '../Routes/app_routes.dart';
-import '../Core/theme/app_colors.dart';
-import '../Widgets/build_header.dart';
+import '../routes/app_routes.dart';
+import '../core/theme/app_colors.dart';
+import '../widgets/build_header.dart';
 
 //-------------------------------------------------------- SignupScreen Class ----------------------------------------------------------
 class SignupScreen extends StatefulWidget {

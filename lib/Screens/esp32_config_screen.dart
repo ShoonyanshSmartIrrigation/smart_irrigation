@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/esp32_service.dart';
-import '../Core/theme/app_colors.dart';
+import '../core/theme/app_colors.dart';
 
 //-------------------------------------------------------- Esp32ConfigScreen Class ----------------------------------------------------------
 class Esp32ConfigScreen extends StatefulWidget {

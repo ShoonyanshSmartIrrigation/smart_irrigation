@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/schedule_service.dart';
-import '../Widgets/build_header.dart';
-import '../Core/theme/app_colors.dart';
+import '../widgets/build_header.dart';
+import '../core/theme/app_colors.dart';
 
 //-------------------------------------------------------- ScheduleScreen Class ----------------------------------------------------------
 class ScheduleScreen extends StatefulWidget {

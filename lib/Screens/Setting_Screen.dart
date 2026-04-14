@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../services/settings_service.dart';
 import '../services/theme_service.dart';
-import '../Widgets/build_header.dart';
-import '../Core/theme/app_colors.dart';
+import '../widgets/build_header.dart';
+import '../core/theme/app_colors.dart';
 
 //-------------------------------------------------------- SettingsScreen Class ----------------------------------------------------------
 class SettingsScreen extends StatefulWidget {

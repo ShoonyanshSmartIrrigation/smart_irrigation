@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../services/plant_service.dart';
 import '../data_manager.dart';
-import '../Widgets/build_header.dart';
-import '../Core/theme/app_colors.dart';
+import '../widgets/build_header.dart';
+import '../core/theme/app_colors.dart';
 
 //-------------------------------------------------------- PlantControlScreen Class ----------------------------------------------------------
 class PlantControlScreen extends StatefulWidget {

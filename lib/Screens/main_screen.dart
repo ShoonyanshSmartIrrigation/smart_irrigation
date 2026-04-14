@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../Widgets/custom_bottom_nav.dart';
+import '../widgets/custom_bottom_nav.dart';
 
 //-------------------------------------------------------- MainScreen Class ----------------------------------------------------------
 class MainScreen extends StatelessWidget {

@@ -2,16 +2,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../Auth/Login_Screen.dart';
-import '../Auth/Signup_Screen.dart';
-import '../Screens/MainScreen.dart';
-import '../Screens/Dashboard_screen.dart';
-import '../Screens/plant_control_screen.dart';
-import '../Screens/schedule_screen.dart';
-import '../Screens/Setting_Screen.dart';
-import '../Screens/Esp32Config_Screen.dart';
-import '../Screens/SplashScreen.dart';
-import '../Screens/setup_screen.dart';
+import '../auth/login_screen.dart';
+import '../auth/signup_screen.dart';
+import '../screens/main_screen.dart';
+import '../screens/dashboard_screen.dart';
+import '../screens/plant_control_screen.dart';
+import '../screens/schedule_screen.dart';
+import '../screens/setting_screen.dart';
+import '../screens/esp32_config_screen.dart';
+import '../screens/splash_screen.dart';
+import '../screens/setup_screen.dart';
 import '../services/setup_logic.dart';
 
 class GoRouterRefreshStream extends ChangeNotifier {

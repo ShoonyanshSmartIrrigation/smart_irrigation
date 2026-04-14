@@ -4,10 +4,10 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import '../Routes/app_routes.dart';
+import '../routes/app_routes.dart';
 import '../services/auth_service.dart';
-import '../Widgets/build_header.dart';
-import '../Core/theme/app_colors.dart';
+import '../widgets/build_header.dart';
+import '../core/theme/app_colors.dart';
 
 //-------------------------------------------------------- LoginScreen Class ----------------------------------------------------------
 class LoginScreen extends StatefulWidget {
