@@ -244,7 +244,7 @@ class _SetupScreenState extends State<SetupScreen> {
       child: Column(
         children: [
           Text(
-            "Ensure your device is nearby. We will connect to ESP32_IRRIGATION.", 
+            "Ensure your device is nearby. We will connect to Device.",
             textAlign: TextAlign.center, 
             style: TextStyle(color: isDark ? Colors.white70 : Colors.grey.shade600, height: 1.5, fontSize: 14),
           ),
@@ -361,7 +361,7 @@ class _SetupScreenState extends State<SetupScreen> {
             Column(
               children: [
                 Text(
-                  "Ensure your ESP32 is powered on and connected to the same Wi-Fi network.", 
+                  "Ensure your Device is powered on and connected to the same Wi-Fi network.",
                   textAlign: TextAlign.center, 
                   style: TextStyle(color: isDark ? Colors.white70 : Colors.grey.shade600, height: 1.5, fontSize: 14),
                 ),

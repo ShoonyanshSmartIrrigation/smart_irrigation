@@ -50,7 +50,7 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
     setState(() {
       isLoading = true;
       status = "Searching...";
-      result = "Looking for ESP32 on your network...";
+      result = "Looking for Device on your network...";
       discoveredIp = null;
     });
 
@@ -65,7 +65,7 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
           discoveredIp = resultData['ip'];
         } else {
           status = "Not Found";
-          result = "Could not find ESP32. Please ensure it's powered on and on the same Wi-Fi.";
+          result = "Could not find Device. Please ensure it's powered on and on the same Wi-Fi.";
         }
       });
     }
@@ -78,7 +78,7 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
     return Scaffold(
       backgroundColor: isDark ? null : AppColors.background,
       appBar: AppBar(
-        title: const Text("ESP32 Auto Connect", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Device Auto Connect", style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.white,
         elevation: 0,

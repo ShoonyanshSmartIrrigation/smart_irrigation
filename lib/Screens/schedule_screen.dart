@@ -408,7 +408,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             ],
           ),
           const SizedBox(height: 5),
-          const Text("Automate irrigation via Firebase & ESP32", style: TextStyle(color: Colors.white70, fontSize: 14)),
+          const Text("Automate irrigation via Firebase & Device", style: TextStyle(color: Colors.white70, fontSize: 14)),
         ],
       ),
     );
