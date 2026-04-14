@@ -415,8 +415,6 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
-import 'package:firebase_auth/firebase_auth.dart';
 import '../data_manager.dart';
 import 'esp32_service.dart';
 import 'plant_service.dart';
@@ -438,7 +436,6 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
   final DataManager _dataManager = DataManager();
   final Esp32Service _esp32Service = Esp32Service();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   late SharedPreferences _prefs;
 
   // State

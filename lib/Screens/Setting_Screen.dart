@@ -146,14 +146,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildSettingsGroup([
               _buildSettingItem(
                 icon: Icons.settings_ethernet,
-                title: "ESP32 IP Address",
+                title: "Device IP Address",
                 subtitle: _service.esp32Ip,
                 onTap: _showIpDialog,
               ),
               _buildSettingItem(
                 icon: Icons.wifi_find,
-                title: "ESP32 Configuration",
-                subtitle: "Find ESP32 on local network",
+                title: "Device Configuration",
+                subtitle: "Find Device on local network",
                 onTap: () => context.push('/esp32Config'),
                 iconColor: Colors.orange[800]!,
                 showDivider: false,
@@ -287,9 +287,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     TextEditingController controller = TextEditingController(text: _service.esp32Ip == "Not Set" ? "" : _service.esp32Ip);
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("ESP32 IP Address"),
+        title: const Text("Device IP Address"),
         content: TextField(
           controller: controller,
           decoration: const InputDecoration(
@@ -298,7 +298,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("CANCEL")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
@@ -308,7 +308,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               String value = controller.text.trim();
               if (_service.isValidIp(value)) {
                 _service.updateSetting("esp_ip", value);
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Invalid IP Address")));
               }
@@ -323,15 +323,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _showLogoutDialog() {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Logout"),
         content: const Text("Are you sure you want to sign out?"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("CANCEL")),
           TextButton(
             onPressed: () async {
-              context.pop();
+              Navigator.pop(dialogContext);
               await _service.logout();
               if (mounted) context.go('/login');
             },

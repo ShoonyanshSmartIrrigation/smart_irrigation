@@ -206,10 +206,9 @@ class _SetupScreenState extends State<SetupScreen> {
               offset: const Offset(0, 6),
             ),
           ],
-          border: Border.all(
-            color: isSelected ? AppColors.primary : (isDark ? Colors.white10 : Colors.grey.shade200),
-            width: 2,
-          ),
+          border: isSelected 
+            ? Border.all(color: AppColors.primary, width: 2)
+            : (isDark ? null : Border.all(color: Colors.grey.shade200, width: 2)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -330,7 +329,7 @@ class _SetupScreenState extends State<SetupScreen> {
               children: [
                 const CircularProgressIndicator(color: AppColors.primary),
                 const SizedBox(height: 20),
-                Text("Scanning network for ESP32...", style: TextStyle(color: isDark ? Colors.white70 : Colors.grey.shade600, fontSize: 16)),
+                Text("Scanning network for Device...", style: TextStyle(color: isDark ? Colors.white70 : Colors.grey.shade600, fontSize: 16)),
               ],
             )
           else if (_scanComplete && _discoveredIp != null)
