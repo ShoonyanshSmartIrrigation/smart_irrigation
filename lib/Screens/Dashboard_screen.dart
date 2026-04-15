@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:go_router/go_router.dart';
+import 'package:smartirrigation/services/plant_service.dart';
 import '../services/dashboard_service.dart';
 import '../widgets/build_header.dart';
 import '../core/theme/app_colors.dart';
@@ -23,7 +24,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? City;
   Map<String, dynamic>? weather;
   bool loading = false;
-
+  bool smartAutoAllPlants = false;
   Future<void> updateWeather(StateSetter setState, String name) async {
     setState(() => loading = true);
     final data = await WeatherService.fetchWeather(name);
@@ -65,7 +66,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showTimerPicker() {
     int tempMinutes = _service.selectedMinutes;
     final FixedExtentScrollController scrollController =
-    FixedExtentScrollController(initialItem: tempMinutes - 1);
+        FixedExtentScrollController(initialItem: tempMinutes - 1);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     showModalBottomSheet(
@@ -106,7 +107,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   Text(
                     "How long should irrigation run?",
-                    style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : AppColors.grey),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isDark ? Colors.white70 : AppColors.grey,
+                    ),
                   ),
                   const SizedBox(height: 40),
                   Expanded(
@@ -155,7 +159,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         : FontWeight.w500,
                                     color: isSelected
                                         ? AppColors.primary
-                                        : (isDark ? Colors.white24 : AppColors.grey.withOpacity(0.4)),
+                                        : (isDark
+                                              ? Colors.white24
+                                              : AppColors.grey.withOpacity(
+                                                  0.4,
+                                                )),
                                   ),
                                 ),
                               );
@@ -424,16 +432,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildInfoCard(
-      String title,
-      String value,
-      IconData icon,
-      Color bgColor,
-      Color iconColor, {
-        bool showProgress = false,
-        double progressValue = 0,
-        String? subTitle,
-        VoidCallback? onTap,
-      }) {
+    String title,
+    String value,
+    IconData icon,
+    Color bgColor,
+    Color iconColor, {
+    bool showProgress = false,
+    double progressValue = 0,
+    String? subTitle,
+    VoidCallback? onTap,
+  }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     Widget card = Container(
       padding: const EdgeInsets.all(20),
@@ -542,7 +550,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           color: (_service.mainPumpError || _service.autoModeError)
               ? Colors.redAccent
               : (isDark ? Colors.white24 : Colors.transparent),
-          width: (_service.mainPumpError || _service.autoModeError) ? 2 : (isDark ? 1 : 0),
+          width: (_service.mainPumpError || _service.autoModeError)
+              ? 2
+              : (isDark ? 1 : 0),
         ),
         boxShadow: [
           BoxShadow(
@@ -562,7 +572,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _service.mainPumpError
                 ? Icons.wifi_off_rounded
                 : Icons.power_settings_new_rounded,
-                (val) => _service.toggleMainPump(val),
+            (val) => _service.toggleMainPump(val),
             _service.mainPumpError
                 ? Colors.red.withValues(alpha: 0.1)
                 : Colors.green.withValues(alpha: 0.1),
@@ -574,32 +584,61 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Divider(height: 1, color: AppColors.dashboardDivider),
           ),
           _buildToggleRow(
-            "Automatic Mode",
+            "Smart Auto (All Plants)",
+            smartAutoAllPlants, // ✅ dynamic value
+            Icons.auto_awesome,
+            (val) async {
+              setState(() {
+                smartAutoAllPlants = val; // ✅ update UI state
+              });
+
+              if (val) {
+                // Enable all plant auto modes
+                await PlantService().enableSmartAutoMode();
+
+                if (context.mounted) {
+                  context.go('/zones');
+                }
+              } else {
+                // 🔴 TURN OFF auto mode for all plants
+                await PlantService().disableSmartAutoMode();
+              }
+            },
+            Colors.purple.withOpacity(0.1),
+            Colors.purple,
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: Divider(height: 1, color: AppColors.dashboardDivider),
+          ),
+          _buildToggleRow(
+            "Timer Mode",
             _service.autoMode,
             _service.autoModeError
                 ? Icons.wifi_off_rounded
                 : Icons.auto_awesome_rounded,
-                (val) => _service.toggleAllMotors(val),
+            (val) => _service.toggleAllMotors(val),
             _service.autoModeError
                 ? Colors.red.withValues(alpha: 0.1)
                 : Colors.blue.withValues(alpha: 0.1),
             _service.autoModeError ? Colors.red : Colors.blue,
             isError: _service.autoModeError,
           ),
+          // _buildToggleRow("Automatic Mode"),
         ],
       ),
     );
   }
 
   Widget _buildToggleRow(
-      String title,
-      bool value,
-      IconData icon,
-      Function(bool) onChanged,
-      Color iconBg,
-      Color iconColor, {
-        bool isError = false,
-      }) {
+    String title,
+    bool value,
+    IconData icon,
+    Function(bool) onChanged,
+    Color iconBg,
+    Color iconColor, {
+    bool isError = false,
+  }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -617,7 +656,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 16,
-            color: isError ? Colors.red : (isDark ? Colors.white : Colors.black87),
+            color: isError
+                ? Colors.red
+                : (isDark ? Colors.white : Colors.black87),
           ),
         ),
         trailing: Switch(
@@ -638,16 +679,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.dashboardTimerCardBg : AppColors.cardBackground,
+        color: isDark
+            ? AppColors.dashboardTimerCardBg
+            : AppColors.cardBackground,
         borderRadius: BorderRadius.circular(30),
         border: isDark ? Border.all(color: Colors.white24, width: 1) : null,
-        boxShadow: isDark ? null : [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -682,7 +727,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Text(
                   "Irrigation Timer",
                   style: TextStyle(
-                    color: isDark ? AppColors.white : AppColors.dashboardTextDark,
+                    color: isDark
+                        ? AppColors.white
+                        : AppColors.dashboardTextDark,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
@@ -709,7 +756,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         Icon(
           Icons.timer_outlined,
-          color: (isDark ? AppColors.white : AppColors.dashboardTextDark).withValues(alpha: 0.2),
+          color: (isDark ? AppColors.white : AppColors.dashboardTextDark)
+              .withValues(alpha: 0.2),
           size: 32,
         ),
       ],
@@ -763,21 +811,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: _timerButton("STOP", isDark ? AppColors.dashboardStopButtonBg : Colors.red.withValues(alpha: 0.08), () {
-            _service.toggleAllMotors(false);
-            FlutterRingtonePlayer().stop();
-          }, textColor: Colors.redAccent),
+          child: _timerButton(
+            "STOP",
+            isDark
+                ? AppColors.dashboardStopButtonBg
+                : Colors.red.withValues(alpha: 0.08),
+            () {
+              _service.toggleAllMotors(false);
+              FlutterRingtonePlayer().stop();
+            },
+            textColor: Colors.redAccent,
+          ),
         ),
       ],
     );
   }
 
   Widget _timerButton(
-      String label,
-      Color color,
-      VoidCallback onTap, {
-        Color textColor = AppColors.white,
-      }) {
+    String label,
+    Color color,
+    VoidCallback onTap, {
+    Color textColor = AppColors.white,
+  }) {
     return SizedBox(
       height: 55,
       child: ElevatedButton(
@@ -838,25 +893,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     IconData getIcon(String? condition) {
       switch (condition?.toLowerCase()) {
-        case 'clear': return Icons.wb_sunny_rounded;
-        case 'clouds': return Icons.cloud_rounded;
+        case 'clear':
+          return Icons.wb_sunny_rounded;
+        case 'clouds':
+          return Icons.cloud_rounded;
         case 'rain':
-        case 'drizzle': return Icons.water_drop_rounded;
-        case 'snow': return Icons.ac_unit_rounded;
-        case 'thunderstorm': return Icons.flash_on_rounded;
-        default: return Icons.cloud_queue_rounded;
+        case 'drizzle':
+          return Icons.water_drop_rounded;
+        case 'snow':
+          return Icons.ac_unit_rounded;
+        case 'thunderstorm':
+          return Icons.flash_on_rounded;
+        default:
+          return Icons.cloud_queue_rounded;
       }
     }
 
     Color getColor(String? condition) {
       switch (condition?.toLowerCase()) {
-        case 'clear': return Colors.orangeAccent;
-        case 'clouds': return const Color.fromARGB(255, 105, 143, 162);
+        case 'clear':
+          return Colors.orangeAccent;
+        case 'clouds':
+          return const Color.fromARGB(255, 105, 143, 162);
         case 'rain':
-        case 'drizzle': return AppColors.dashboardMoistureIcon;
-        case 'snow': return Colors.lightBlueAccent;
-        case 'thunderstorm': return Colors.deepPurple;
-        default: return AppColors.grey;
+        case 'drizzle':
+          return AppColors.dashboardMoistureIcon;
+        case 'snow':
+          return Colors.lightBlueAccent;
+        case 'thunderstorm':
+          return Colors.deepPurple;
+        default:
+          return AppColors.grey;
       }
     }
 
@@ -890,7 +957,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final windSpeed = weather?['wind']?['speed'];
         String? condition;
         String? description;
-        if (weather != null && weather!['weather'] != null && weather!['weather'].isNotEmpty) {
+        if (weather != null &&
+            weather!['weather'] != null &&
+            weather!['weather'].isNotEmpty) {
           condition = weather!['weather'][0]?['main']?.toString();
           description = weather!['weather'][0]?['description']?.toString();
         }
@@ -900,93 +969,118 @@ class _DashboardScreenState extends State<DashboardScreen> {
           width: double.infinity,
           child: Center(
             child: Card(
-              color: isDark ? Theme.of(context).cardColor : AppColors.cardBackground,
+              color: isDark
+                  ? Theme.of(context).cardColor
+                  : AppColors.cardBackground,
               elevation: 4,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(25),
-                side: isDark ? const BorderSide(color: Colors.white24, width: 1) : BorderSide.none,
+                side: isDark
+                    ? const BorderSide(color: Colors.white24, width: 1)
+                    : BorderSide.none,
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: City == null
                     ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.location_off,
-                      color: AppColors.plantControlError,
-                      size: 40,
-                    ),
-                    const SizedBox(height: 10),
-                    const Text("No City Selected"),
-                    const SizedBox(height: 10),
-                    ElevatedButton(
-                      onPressed: () => openEditDialog(context, setState),
-                      child: const Text("Set City"),
-                    ),
-                  ],
-                )
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.location_off,
+                            color: AppColors.plantControlError,
+                            size: 40,
+                          ),
+                          const SizedBox(height: 10),
+                          const Text("No City Selected"),
+                          const SizedBox(height: 10),
+                          ElevatedButton(
+                            onPressed: () => openEditDialog(context, setState),
+                            child: const Text("Set City"),
+                          ),
+                        ],
+                      )
                     : loading
                     ? const CircularProgressIndicator()
                     : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          City ?? "",
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.edit),
-                          onPressed: () => openEditDialog(context, setState),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          getIcon(condition),
-                          size: 40,
-                          color: getColor(condition),
-                        ),
-                        const SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              temp != null ? "${(temp as num).round()}°C" : "--",
-                              style: const TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                City ?? "",
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
-                            ),
-                            Text(description.toUpperCase()),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 15),
-                    Row(
-                      children: [
-                        detail(Icons.water_drop, "${humidity ?? '--'}%", "Humidity"),
-                        detail(Icons.air, "${windSpeed ?? '--'} m/s", "Wind"),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        detail(Icons.speed, "${pressure ?? '--'} hPa", "Pressure"),
-                        detail(Icons.thermostat, feelsLike != null ? "${(feelsLike as num).round()}°C" : "--", "Feels Like"),
-                      ],
-                    ),
-                  ],
-                ),
+                              IconButton(
+                                icon: const Icon(Icons.edit),
+                                onPressed: () =>
+                                    openEditDialog(context, setState),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                getIcon(condition),
+                                size: 40,
+                                color: getColor(condition),
+                              ),
+                              const SizedBox(width: 10),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    temp != null
+                                        ? "${(temp as num).round()}°C"
+                                        : "--",
+                                    style: const TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(description.toUpperCase()),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 15),
+                          Row(
+                            children: [
+                              detail(
+                                Icons.water_drop,
+                                "${humidity ?? '--'}%",
+                                "Humidity",
+                              ),
+                              detail(
+                                Icons.air,
+                                "${windSpeed ?? '--'} m/s",
+                                "Wind",
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              detail(
+                                Icons.speed,
+                                "${pressure ?? '--'} hPa",
+                                "Pressure",
+                              ),
+                              detail(
+                                Icons.thermostat,
+                                feelsLike != null
+                                    ? "${(feelsLike as num).round()}°C"
+                                    : "--",
+                                "Feels Like",
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
               ),
             ),
           ),

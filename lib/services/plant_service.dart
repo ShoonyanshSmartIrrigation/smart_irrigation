@@ -181,6 +181,20 @@ class PlantService extends ChangeNotifier {
     }
   }
 
+  Future<void> enableSmartAutoMode() async {
+    for (var plant in _dataManager.plants) {
+      plant.isAutoMode = true;
+    }
+    notifyListeners();
+  }
+
+  Future<void> disableSmartAutoMode() async {
+    for (var plant in _dataManager.plants) {
+      plant.isAutoMode = false;
+    }
+    notifyListeners();
+  }
+
   List<Plant> getPlants() => _dataManager.plants;
   int getActiveMotors() => _dataManager.activeMotors;
   int getTotalMotors() => _dataManager.totalMotors;

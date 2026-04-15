@@ -448,7 +448,7 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
   bool autoModeError = false;
   int timerSeconds = 60;
   int selectedMinutes = 1;
-
+  bool allPlantsAutoMode = false;
   // Weather State
   String weatherCondition = "Mostly Sunny";
   String weatherTemp = "28°C";
@@ -571,8 +571,8 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
   void _setupConnectivityListener() {
     _connectivitySubscription?.cancel();
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
-        List<ConnectivityResult> results,
-        ) {
+      List<ConnectivityResult> results,
+    ) {
       _connectivityDebounce?.cancel();
       _connectivityDebounce = Timer(const Duration(milliseconds: 500), () {
         if (results.contains(ConnectivityResult.none)) {
@@ -587,8 +587,8 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
   void _startPeriodicTasks() {
     _connectionCheckTimer?.cancel();
     _connectionCheckTimer = Timer.periodic(const Duration(seconds: 15), (
-        timer,
-        ) {
+      timer,
+    ) {
       checkEspConnection();
     });
 
@@ -645,7 +645,7 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
             for (var plant in _dataManager.plants) {
               plant.isMotorOn =
                   activeList.contains(plant.id) ||
-                      activeList.contains(plant.id.toString());
+                  activeList.contains(plant.id.toString());
             }
           }
 
@@ -795,6 +795,26 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
     int min = timerSeconds ~/ 60;
     int sec = timerSeconds % 60;
     return "${min.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}";
+  }
+
+  Future<void> toggleAllPlantsAutoMode(bool value) async {
+    if (_isDisposed) return;
+
+    _updateState(() {
+      allPlantsAutoMode = value;
+
+      // Apply auto mode to ALL plants
+      for (var plant in _dataManager.plants) {
+        plant.isAutoMode = value;
+      }
+    });
+
+    // Notify PlantService so UI updates
+    try {
+      PlantService().notifyListeners();
+    } catch (e) {
+      debugPrint("Error notifying PlantService: $e");
+    }
   }
 
   DataManager get dataManager => _dataManager;
