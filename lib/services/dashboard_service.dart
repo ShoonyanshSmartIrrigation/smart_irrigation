@@ -416,7 +416,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../data_manager.dart';
-import 'esp32_service.dart';
+import 'communications/wifi_service.dart';
+import 'communications/bluetooth_service.dart';
 import 'plant_service.dart';
 
 //-------------------------------------------------------- DashboardStrings Class ----------------------------------------------------------
@@ -425,6 +426,9 @@ class DashboardStrings {
   static const systemOnline = "SYSTEM ONLINE";
   static const noNetwork = "NO NETWORK";
   static const loading = "CHECKING...";
+  static const wifi = "WIFI";
+  static const ble = "BLE";
+  static const cloud = "CLOUD";
 }
 
 //-------------------------------------------------------- DashboardService Class ----------------------------------------------------------
@@ -434,7 +438,8 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
   DashboardService._internal();
 
   final DataManager _dataManager = DataManager();
-  final Esp32Service _esp32Service = Esp32Service();
+  final WifiService _wifiService = WifiService();
+  final BleService _bleService = BleService();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   late SharedPreferences _prefs;
 
@@ -442,6 +447,7 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
   bool mainMotor = false;
   bool autoMode = false;
   String connectionStatus = DashboardStrings.disconnected;
+  String connectionType = "NONE";
   String lastSeenText = "";
   String userName = "User";
   bool mainPumpError = false;
@@ -601,11 +607,23 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<bool> checkEspConnection() async {
     if (_isDisposed) return false;
+    
+    // Check BLE first as it's a direct connection
+    if (_bleService.isConnected) {
+      _updateState(() {
+        connectionStatus = DashboardStrings.systemOnline;
+        connectionType = DashboardStrings.ble;
+        lastSeenText = "Live";
+      });
+      return true;
+    }
+
     try {
-      final statusMap = await _esp32Service.getSystemStatus().timeout(
+      final statusMap = await _wifiService.getSystemStatus().timeout(
         const Duration(seconds: 5),
       );
       bool isConnected = statusMap?['status'] == 'ok';
+      bool isRemote = statusMap?['remote'] == true;
 
       String lastSeenStr = "";
       if (statusMap?.containsKey('lastSeen') == true &&
@@ -619,21 +637,20 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
           if (diff.inMinutes < 1) {
             lastSeenStr = "Just now";
           } else if (diff.inHours < 1) {
-            lastSeenStr = "\${diff.inMinutes}m ago";
+            lastSeenStr = "${diff.inMinutes}m ago";
           } else if (diff.inDays < 1) {
-            lastSeenStr = "\${diff.inHours}h ago";
+            lastSeenStr = "${diff.inHours}h ago";
           } else {
-            lastSeenStr = "\${diff.inDays}d ago";
+            lastSeenStr = "${diff.inDays}d ago";
           }
         }
       }
 
       _updateState(() {
-        connectionStatus = isConnected
-            ? DashboardStrings.systemOnline
-            : DashboardStrings.disconnected;
-        lastSeenText = lastSeenStr;
         if (isConnected) {
+          connectionStatus = DashboardStrings.systemOnline;
+          connectionType = isRemote ? DashboardStrings.cloud : DashboardStrings.wifi;
+          
           mainMotor = statusMap!['mainMotor'] == 'on';
           autoMode = statusMap['autoMode'] == true;
 
@@ -653,11 +670,18 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
             PlantService()
                 .notifyListeners(); // Force Plant Control Screen to refresh UI
           } catch (_) {}
+        } else {
+          connectionStatus = DashboardStrings.disconnected;
+          connectionType = "NONE";
         }
+        lastSeenText = lastSeenStr;
       });
       return isConnected;
     } catch (e) {
-      _updateState(() => connectionStatus = DashboardStrings.disconnected);
+      _updateState(() {
+        connectionStatus = DashboardStrings.disconnected;
+        connectionType = "NONE";
+      });
       return false;
     }
   }
@@ -667,7 +691,7 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
     _isProcessingMainPump = true;
     try {
       // Act as Master Switch: Toggle ALL motors on/off
-      bool success = await _esp32Service
+      bool success = await _wifiService
           .toggleAllMotors(value)
           .timeout(const Duration(seconds: 5));
       _updateState(() {
@@ -711,7 +735,7 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
     if (_isProcessingAutoMode || _isDisposed) return false;
     _isProcessingAutoMode = true;
     try {
-      bool success = await _esp32Service
+      bool success = await _wifiService
           .toggleAllMotors(value)
           .timeout(const Duration(seconds: 5));
       _updateState(() {

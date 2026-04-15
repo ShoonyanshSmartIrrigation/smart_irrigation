@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import '../services/communications/wifi_service.dart';
+import '../services/communications/bluetooth_service.dart';
 import '../services/setup_logic.dart';
-import '../services/esp32_service.dart';
 import '../core/theme/app_colors.dart';
-import '../bluetooth_connection.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -13,7 +13,8 @@ class SetupScreen extends StatefulWidget {
 
 class _SetupScreenState extends State<SetupScreen> {
   final SetupLogic _setupLogic = SetupLogic();
-  final Esp32Service _esp32Service = Esp32Service();
+  final WifiService _wifiService = WifiService();
+  final BleService _bleService = BleService();
   final TextEditingController _deviceIdController = TextEditingController();
   
   int _currentStep = 0;
@@ -51,7 +52,7 @@ class _SetupScreenState extends State<SetupScreen> {
       _isReadyToStart = false;
     });
 
-    Map<String, dynamic>? resultData = await _esp32Service.startAutoDiscovery();
+    Map<String, dynamic>? resultData = await _wifiService.startAutoDiscovery();
 
     if (mounted) {
       setState(() {
@@ -254,29 +255,41 @@ class _SetupScreenState extends State<SetupScreen> {
               setState(() {
                 _isScanning = true;
               });
-            
+              
               try {
-                final btService = BluetoothConnectionService();
-                await btService.startScan();
+                await _bleService.startScan();
                 
                 // Wait a bit for scan
                 await Future.delayed(const Duration(seconds: 4));
                 
-                await btService.stopScan();
-                final results = await btService.scanResults.first;
+                await _bleService.stopScan();
+                // Get the first result from the stream
+                final results = await _bleService.scanResults.first;
+                
                 if (results.isNotEmpty) {
-                  final device = results.first.device;
-                  bool connected = await btService.connectToDevice(device);
+                  // Find the device named "ESP32_IRRIGATION" or just the first one for now
+                  final result = results.firstWhere(
+                    (r) => r.device.platformName.contains("ESP32") || r.advertisementData.advName.contains("ESP32"),
+                    orElse: () => results.first,
+                  );
+                  
+                  final device = result.device;
+                  bool connected = await _bleService.connect(device);
+                  
                   if (connected) {
-                    // In a real app we might read a specific characteristic here, 
-                    // but for now we'll use the device's remote ID or a mocked read.
-                    String fetchedDeviceId = device.remoteId.toString().replaceAll(':', '').substring(0, 10).toUpperCase();
-                    if (fetchedDeviceId.length < 10) fetchedDeviceId = fetchedDeviceId.padRight(10, 'A');
+                    // Generate a 10-character ID from the remoteId
+                    String fetchedDeviceId = device.remoteId.toString().replaceAll(':', '').toUpperCase();
+                    if (fetchedDeviceId.length > 10) {
+                      fetchedDeviceId = fetchedDeviceId.substring(0, 10);
+                    } else if (fetchedDeviceId.length < 10) {
+                      fetchedDeviceId = fetchedDeviceId.padRight(10, 'A');
+                    }
 
                     if (mounted) {
                       setState(() {
                         _isReadyToStart = true;
                         _discoveredDeviceId = fetchedDeviceId;
+                        _deviceIdController.text = fetchedDeviceId;
                       });
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Bluetooth connected: $_discoveredDeviceId!")));
                     }
@@ -284,7 +297,7 @@ class _SetupScreenState extends State<SetupScreen> {
                     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Failed to connect via Bluetooth")));
                   }
                 } else {
-                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No ESP32_IRRIGATION found nearby")));
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No device found nearby")));
                 }
               } catch (e) {
                 if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Bluetooth error: $e")));

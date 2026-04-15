@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../services/esp32_service.dart';
+import '../services/communications/wifi_service.dart';
 import '../core/theme/app_colors.dart';
 
 //-------------------------------------------------------- Esp32ConfigScreen Class ----------------------------------------------------------
@@ -11,7 +11,7 @@ class Esp32ConfigScreen extends StatefulWidget {
 
 //-------------------------------------------------------- _Esp32ConfigScreenState Class ----------------------------------------------------------
 class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
-  final Esp32Service _esp32Service = Esp32Service();
+  final WifiService _wifiService = WifiService();
   String status = "Checking...";
   String result = "Verifying current status...";
   bool isLoading = false;
@@ -31,7 +31,7 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
       isLoading = true;
     });
 
-    bool isConnected = await _esp32Service.checkInitialStatus();
+    bool isConnected = await _wifiService.checkInitialStatus();
     if (isConnected) {
       if (mounted) {
         setState(() {
@@ -54,7 +54,7 @@ class _Esp32ConfigScreenState extends State<Esp32ConfigScreen> {
       discoveredIp = null;
     });
 
-    Map<String, dynamic>? resultData = await _esp32Service.startAutoDiscovery();
+    Map<String, dynamic>? resultData = await _wifiService.startAutoDiscovery();
 
     if (mounted) {
       setState(() {
