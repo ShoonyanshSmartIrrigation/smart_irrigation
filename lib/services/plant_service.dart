@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../data_manager.dart';
-import 'esp32_service.dart';
+import 'communications/wifi_service.dart';
 
 //-------------------------------------------------------- PlantService Class ----------------------------------------------------------
 class PlantService extends ChangeNotifier {
@@ -10,7 +10,7 @@ class PlantService extends ChangeNotifier {
   PlantService._internal();
 
   final DataManager _dataManager = DataManager();
-  final Esp32Service _esp32Service = Esp32Service();
+  final WifiService _wifiService = WifiService();
 
   // State
   bool isSyncing = false;
@@ -62,7 +62,7 @@ class PlantService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final data = await _esp32Service.getMoistureData();
+      final data = await _wifiService.getMoistureData();
       if (data != null) {
         for (var plant in _dataManager.plants) {
           String sensorKey = "sensor_${plant.id}";
@@ -87,7 +87,7 @@ class PlantService extends ChangeNotifier {
         }
 
         // Sync system status briefly
-        final statusMap = await _esp32Service.getSystemStatus();
+        final statusMap = await _wifiService.getSystemStatus();
         if (statusMap != null && statusMap.containsKey('activeMotorsList')) {
           List<dynamic> activeList = statusMap['activeMotorsList'];
           for (var plant in _dataManager.plants) {
@@ -124,7 +124,7 @@ class PlantService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      bool success = await _esp32Service.toggleMotor(plant.id, targetState);
+      bool success = await _wifiService.toggleMotor(plant.id, targetState);
       if (success) {
         plant.isMotorOn = targetState;
         plantConnectionErrors[plant.id] = false;
@@ -163,7 +163,7 @@ class PlantService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      bool success = await _esp32Service.toggleAllMotors(value);
+      bool success = await _wifiService.toggleAllMotors(value);
       if (success) {
         for (var plant in _dataManager.plants) {
           plant.isMotorOn = value;

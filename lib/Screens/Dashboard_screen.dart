@@ -331,7 +331,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildConnectionBadge() {
-    bool online = _service.connectionStatus == "SYSTEM ONLINE";
+    bool online = _service.connectionStatus == DashboardStrings.systemOnline;
+    bool noNetwork = _service.connectionStatus == DashboardStrings.noNetwork;
+    
+    Color statusColor = online ? Colors.greenAccent : (noNetwork ? Colors.orangeAccent : Colors.redAccent);
+    String displayStatus = online ? _service.connectionType : _service.connectionStatus;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -352,12 +357,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 width: 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: online ? Colors.greenAccent : Colors.redAccent,
+                  color: statusColor,
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: (online ? Colors.greenAccent : Colors.redAccent)
-                          .withValues(alpha: 0.5),
+                      color: statusColor.withValues(alpha: 0.5),
                       blurRadius: 4,
                       spreadRadius: 1,
                     ),
@@ -366,7 +370,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(width: 8),
               Text(
-                _service.connectionStatus,
+                displayStatus,
                 style: const TextStyle(
                   color: AppColors.white,
                   fontWeight: FontWeight.w700,
@@ -377,7 +381,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
         ),
-        if (!online && _service.lastSeenText.isNotEmpty)
+        if (!online && _service.lastSeenText.isNotEmpty && !noNetwork)
           Padding(
             padding: const EdgeInsets.only(top: 4, right: 4),
             child: Text(
