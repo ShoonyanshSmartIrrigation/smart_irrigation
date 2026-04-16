@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 import 'package:permission_handler/permission_handler.dart';
 
@@ -29,6 +30,20 @@ class BleService {
 
   /// Check if a device is currently connected
   bool get isConnected => _connectedDevice != null;
+
+
+  Future<bool> ensureBluetoothEnabled() async {
+    // 1. Check current state
+    if (await fbp.FlutterBluePlus.adapterState.first != fbp.BluetoothAdapterState.on) {
+      // 2. Request to turn on (Only works on Android)
+      if (Platform.isAndroid) {
+        await fbp.FlutterBluePlus.turnOn();
+        // Wait a moment for it to turn on
+        await Future.delayed(const Duration(seconds: 1));
+      }
+    }
+    return await fbp.FlutterBluePlus.adapterState.first == fbp.BluetoothAdapterState.on;
+  }
 
   /// Request necessary BLE permissions
   Future<bool> requestPermissions() async {

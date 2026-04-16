@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import '../services/communications/wifi_service.dart';
 import '../services/communications/bluetooth_service.dart';
 import '../services/setup_logic.dart';
@@ -183,12 +184,16 @@ class _SetupScreenState extends State<SetupScreen> {
         setState(() {
           _selectedMethodIndex = index;
           _isReadyToStart = false; // Reset until valid
-          if (index == 1 && !_scanComplete) {
+          
+          // Clear previous state when switching methods
+          _isScanning = false; 
+          _scanComplete = false;
+          _discoveredIp = null;
+          _discoveredDeviceId = null;
+          _deviceIdController.clear();
+
+          if (index == 1) {
             _startScan();
-          } else if (index == 1 && _scanComplete && _discoveredIp != null) {
-            _isReadyToStart = true;
-          } else if (index == 2) {
-            _isReadyToStart = _deviceIdController.text.length == 10;
           }
         });
       },
@@ -244,81 +249,137 @@ class _SetupScreenState extends State<SetupScreen> {
       ),
       child: Column(
         children: [
-          Text(
-            "Ensure your device is nearby. We will connect to Device.",
-            textAlign: TextAlign.center, 
-            style: TextStyle(color: isDark ? Colors.white70 : Colors.grey.shade600, height: 1.5, fontSize: 14),
-          ),
-          const SizedBox(height: 25),
-          ElevatedButton.icon(
-            onPressed: _isScanning ? null : () async {
-              setState(() {
-                _isScanning = true;
-              });
-              
-              try {
-                await _bleService.startScan();
-                
-                // Wait a bit for scan
-                await Future.delayed(const Duration(seconds: 4));
-                
-                await _bleService.stopScan();
-                // Get the first result from the stream
-                final results = await _bleService.scanResults.first;
-                
-                if (results.isNotEmpty) {
-                  // Find the device named "ESP32_IRRIGATION" or just the first one for now
-                  final result = results.firstWhere(
-                    (r) => r.device.platformName.contains("ESP32") || r.advertisementData.advName.contains("ESP32"),
-                    orElse: () => results.first,
-                  );
-                  
-                  final device = result.device;
-                  bool connected = await _bleService.connect(device);
-                  
-                  if (connected) {
-                    // Generate a 10-character ID from the remoteId
-                    String fetchedDeviceId = device.remoteId.toString().replaceAll(':', '').toUpperCase();
-                    if (fetchedDeviceId.length > 10) {
-                      fetchedDeviceId = fetchedDeviceId.substring(0, 10);
-                    } else if (fetchedDeviceId.length < 10) {
-                      fetchedDeviceId = fetchedDeviceId.padRight(10, 'A');
-                    }
+          if (_discoveredDeviceId != null && _selectedMethodIndex == 0)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1), 
+                borderRadius: BorderRadius.circular(12), 
+                border: Border.all(color: Colors.green.shade300)
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.bluetooth_connected, color: Colors.green.shade600, size: 28),
+                      const SizedBox(width: 10),
+                      Text("Device Paired!", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade700, fontSize: 18)),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  Text("ID: $_discoveredDeviceId", style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: () => setState(() {
+                      _discoveredDeviceId = null;
+                      _isReadyToStart = false;
+                    }),
+                    child: const Text("Re-scan", style: TextStyle(color: AppColors.primary)),
+                  )
+                ],
+              ),
+            )
+          else
+            Column(
+              children: [
+                Text(
+                  "Ensure your device is nearby. We will connect to Device.",
+                  textAlign: TextAlign.center, 
+                  style: TextStyle(color: isDark ? Colors.white70 : Colors.grey.shade600, height: 1.5, fontSize: 14),
+                ),
+                const SizedBox(height: 25),
+                ElevatedButton.icon(
+                  onPressed: _isScanning ? null : () async {
+                    setState(() {
+                      _isScanning = true;
+                    });
+                    
+                    try {
+                      // 1. Force Request Permissions (Location + Bluetooth)
+                      bool hasPermissions = await _bleService.requestPermissions();
+                      if (!hasPermissions) {
+                        throw "Permissions denied. Please allow location and bluetooth.";
+                      }
 
-                    if (mounted) {
-                      setState(() {
-                        _isReadyToStart = true;
-                        _discoveredDeviceId = fetchedDeviceId;
-                        _deviceIdController.text = fetchedDeviceId;
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Bluetooth connected: $_discoveredDeviceId!")));
+                      // 2. Force Request Bluetooth Hardware ON
+                      bool btEnabled = await _bleService.ensureBluetoothEnabled();
+                      if (!btEnabled) {
+                        throw "Please turn on Bluetooth to continue.";
+                      }
+
+                      // 3. Force Request Location Services (GPS) ON
+                      bool isLocationServiceEnabled = await Geolocator.isLocationServiceEnabled();
+                      if (!isLocationServiceEnabled) {
+                        // This opens the system location settings
+                        await Geolocator.openLocationSettings();
+                        throw "Please enable Location Services (GPS) for Bluetooth scanning.";
+                      }
+
+                      // 4. Proceed to Scan
+                      await _bleService.startScan();
+                      
+                      // Wait a bit for scan
+                      await Future.delayed(const Duration(seconds: 4));
+                      
+                      await _bleService.stopScan();
+                      // Get the first result from the stream
+                      final results = await _bleService.scanResults.first;
+                      
+                      if (results.isNotEmpty) {
+                        // Find the device named "ESP32_IRRIGATION" or just the first one for now
+                        final result = results.firstWhere(
+                          (r) => r.device.platformName.contains("ESP32") || r.advertisementData.advName.contains("ESP32"),
+                          orElse: () => results.first,
+                        );
+                        
+                        final device = result.device;
+                        bool connected = await _bleService.connect(device);
+                        
+                        if (connected) {
+                          // Generate a 10-character ID from the remoteId
+                          String fetchedDeviceId = device.remoteId.toString().replaceAll(':', '').toUpperCase();
+                          if (fetchedDeviceId.length > 10) {
+                            fetchedDeviceId = fetchedDeviceId.substring(0, 10);
+                          } else if (fetchedDeviceId.length < 10) {
+                            fetchedDeviceId = fetchedDeviceId.padRight(10, 'A');
+                          }
+
+                          if (mounted) {
+                            setState(() {
+                              _isReadyToStart = true;
+                              _discoveredDeviceId = fetchedDeviceId;
+                              _deviceIdController.text = fetchedDeviceId;
+                            });
+                          }
+                        } else {
+                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Failed to connect via Bluetooth")));
+                        }
+                      } else {
+                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No device found nearby")));
+                      }
+                    } catch (e) {
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                    } finally {
+                      if (mounted) {
+                        setState(() {
+                          _isScanning = false;
+                        });
+                      }
                     }
-                  } else {
-                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Failed to connect via Bluetooth")));
-                  }
-                } else {
-                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No device found nearby")));
-                }
-              } catch (e) {
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Bluetooth error: $e")));
-              } finally {
-                if (mounted) {
-                  setState(() {
-                    _isScanning = false;
-                  });
-                }
-              }
-            },
-            icon: _isScanning 
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : const Icon(Icons.bluetooth_connected),
-            label: Text(_isScanning ? "Scanning..." : "Pair Device"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary, foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  },
+                  icon: _isScanning 
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Icon(Icons.bluetooth_connected),
+                  label: Text(_isScanning ? "Scanning..." : "Pair Device"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary, foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
             ),
-          ),
         ],
       ),
     );

@@ -12,6 +12,8 @@ import '../screens/setting_screen.dart';
 import '../screens/esp32_config_screen.dart';
 import '../screens/splash_screen.dart';
 import '../screens/setup_screen.dart';
+import '../screens/help_screen.dart';
+import '../screens/faq_screen.dart';
 import '../services/setup_logic.dart';
 
 class GoRouterRefreshStream extends ChangeNotifier {
@@ -41,6 +43,8 @@ class AppRoutes {
   static const String settings = '/settings';
   static const String esp32Config = '/esp32Config';
   static const String setup = '/setup';
+  static const String help = '/help';
+  static const String faq = '/faq';
 
   static final GoRouter router = GoRouter(
     initialLocation: splash,
@@ -115,6 +119,16 @@ class AppRoutes {
         name: 'setup',
         path: setup,
         builder: (context, state) => const SetupScreen(),
+      ),
+      GoRoute(
+        name: 'help',
+        path: help,
+        builder: (context, state) => const HelpScreen(),
+      ),
+      GoRoute(
+        name: 'faq',
+        path: faq,
+        builder: (context, state) => const FAQScreen(),
       ),
       GoRoute(
         name: 'esp32Config',

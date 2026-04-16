@@ -6,7 +6,8 @@
 // import 'package:http/http.dart' as http;
 // import 'package:permission_handler/permission_handler.dart';
 // import 'package:firebase_auth/firebase_auth.dart';
-// import '../data_manager.dart';
+// import 'package:intl/intl.dart';
+import '../data_manager.dart';
 // import 'esp32_service.dart';
 // import 'plant_service.dart';
 // import 'weather_service.dart';
@@ -415,9 +416,11 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:intl/intl.dart';
 import '../data_manager.dart';
 import 'communications/wifi_service.dart';
 import 'communications/bluetooth_service.dart';
+import 'communications/unified_command_service.dart';
 import 'plant_service.dart';
 
 //-------------------------------------------------------- DashboardStrings Class ----------------------------------------------------------
@@ -440,6 +443,7 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
   final DataManager _dataManager = DataManager();
   final WifiService _wifiService = WifiService();
   final BleService _bleService = BleService();
+  final UnifiedCommandService _unifiedCommandService = UnifiedCommandService();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   late SharedPreferences _prefs;
 
@@ -607,83 +611,71 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<bool> checkEspConnection() async {
     if (_isDisposed) return false;
-    
-    // Check BLE first as it's a direct connection
-    if (_bleService.isConnected) {
-      _updateState(() {
-        connectionStatus = DashboardStrings.systemOnline;
-        connectionType = DashboardStrings.ble;
-        lastSeenText = "Live";
-      });
-      return true;
-    }
+
+    bool bleConnected = _bleService.isConnected;
+    Map<String, dynamic>? statusMap;
 
     try {
-      final statusMap = await _wifiService.getSystemStatus().timeout(
+      statusMap = await _wifiService.getSystemStatus().timeout(
         const Duration(seconds: 5),
       );
-      bool isConnected = statusMap?['status'] == 'ok';
-      bool isRemote = statusMap?['remote'] == true;
-
-      String lastSeenStr = "";
-      if (statusMap?.containsKey('lastSeen') == true &&
-          statusMap!['lastSeen'] != null) {
-        int lastSeen = statusMap['lastSeen'] as int;
-        if (lastSeen > 0) {
-          final lastSeenDate = DateTime.fromMillisecondsSinceEpoch(
-            lastSeen * 1000,
-          );
-          final diff = DateTime.now().difference(lastSeenDate);
-          if (diff.inMinutes < 1) {
-            lastSeenStr = "Just now";
-          } else if (diff.inHours < 1) {
-            lastSeenStr = "${diff.inMinutes}m ago";
-          } else if (diff.inDays < 1) {
-            lastSeenStr = "${diff.inHours}h ago";
-          } else {
-            lastSeenStr = "${diff.inDays}d ago";
-          }
-        }
-      }
-
-      _updateState(() {
-        if (isConnected) {
-          connectionStatus = DashboardStrings.systemOnline;
-          connectionType = isRemote ? DashboardStrings.cloud : DashboardStrings.wifi;
-          
-          mainMotor = statusMap!['mainMotor'] == 'on';
-          autoMode = statusMap['autoMode'] == true;
-
-          _dataManager.mainMotorOn = mainMotor;
-          _dataManager.isSystemAutoMode = autoMode;
-
-          if (statusMap.containsKey('activeMotorsList')) {
-            List<dynamic> activeList = statusMap['activeMotorsList'];
-            for (var plant in _dataManager.plants) {
-              plant.isMotorOn =
-                  activeList.contains(plant.id) ||
-                      activeList.contains(plant.id.toString());
-            }
-          }
-
-          try {
-            PlantService()
-                .notifyListeners(); // Force Plant Control Screen to refresh UI
-          } catch (_) {}
-        } else {
-          connectionStatus = DashboardStrings.disconnected;
-          connectionType = "NONE";
-        }
-        lastSeenText = lastSeenStr;
-      });
-      return isConnected;
     } catch (e) {
-      _updateState(() {
+      debugPrint("DashboardService Connection Check Error: $e");
+    }
+
+    bool wifiOrCloudConnected = statusMap?['status'] == 'ok';
+    bool isRemote = statusMap?['remote'] == true;
+
+    String lastSeenStr = "";
+    if (statusMap?.containsKey('lastSeen') == true &&
+        statusMap!['lastSeen'] != null) {
+      int lastSeen = statusMap['lastSeen'] as int;
+      if (lastSeen > 0) {
+        final lastSeenDate = DateTime.fromMillisecondsSinceEpoch(
+          lastSeen * 1000,
+        );
+        lastSeenStr = DateFormat('HH:mm').format(lastSeenDate);
+      }
+    }
+
+    _updateState(() {
+      lastSeenText = lastSeenStr;
+
+      if (bleConnected) {
+        connectionStatus = DashboardStrings.systemOnline;
+        connectionType = DashboardStrings.ble;
+        if (lastSeenStr.isEmpty) lastSeenText = "Live";
+      } else if (wifiOrCloudConnected) {
+        connectionStatus = DashboardStrings.systemOnline;
+        connectionType = isRemote ? DashboardStrings.cloud : DashboardStrings.wifi;
+      } else {
         connectionStatus = DashboardStrings.disconnected;
         connectionType = "NONE";
-      });
-      return false;
-    }
+      }
+
+      if (wifiOrCloudConnected && statusMap != null) {
+        mainMotor = statusMap['mainMotor'] == 'on';
+        autoMode = statusMap['autoMode'] == true;
+
+        _dataManager.mainMotorOn = mainMotor;
+        _dataManager.isSystemAutoMode = autoMode;
+
+        if (statusMap.containsKey('activeMotorsList')) {
+          List<dynamic> activeList = statusMap['activeMotorsList'];
+          for (var plant in _dataManager.plants) {
+            plant.isMotorOn =
+                activeList.contains(plant.id) ||
+                    activeList.contains(plant.id.toString());
+          }
+        }
+
+        try {
+          PlantService().notifyListeners();
+        } catch (_) {}
+      }
+    });
+
+    return bleConnected || wifiOrCloudConnected;
   }
 
   Future<bool> toggleMainPump(bool value) async {
@@ -691,7 +683,7 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
     _isProcessingMainPump = true;
     try {
       // Act as Master Switch: Toggle ALL motors on/off
-      bool success = await _wifiService
+      bool success = await _unifiedCommandService
           .toggleAllMotors(value)
           .timeout(const Duration(seconds: 5));
       _updateState(() {
@@ -735,7 +727,7 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
     if (_isProcessingAutoMode || _isDisposed) return false;
     _isProcessingAutoMode = true;
     try {
-      bool success = await _wifiService
+      bool success = await _unifiedCommandService
           .toggleAllMotors(value)
           .timeout(const Duration(seconds: 5));
       _updateState(() {

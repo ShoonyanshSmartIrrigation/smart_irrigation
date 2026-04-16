@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../data_manager.dart';
 import 'communications/wifi_service.dart';
+import 'communications/unified_command_service.dart';
 
 //-------------------------------------------------------- PlantService Class ----------------------------------------------------------
 class PlantService extends ChangeNotifier {
@@ -11,6 +12,7 @@ class PlantService extends ChangeNotifier {
 
   final DataManager _dataManager = DataManager();
   final WifiService _wifiService = WifiService();
+  final UnifiedCommandService _unifiedCommandService = UnifiedCommandService();
 
   // State
   bool isSyncing = false;
@@ -124,7 +126,7 @@ class PlantService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      bool success = await _wifiService.toggleMotor(plant.id, targetState);
+      bool success = await _unifiedCommandService.toggleMotor(plant.id, targetState);
       if (success) {
         plant.isMotorOn = targetState;
         plantConnectionErrors[plant.id] = false;
@@ -163,7 +165,7 @@ class PlantService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      bool success = await _wifiService.toggleAllMotors(value);
+      bool success = await _unifiedCommandService.toggleAllMotors(value);
       if (success) {
         for (var plant in _dataManager.plants) {
           plant.isMotorOn = value;

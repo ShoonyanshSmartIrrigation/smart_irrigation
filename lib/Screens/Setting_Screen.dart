@@ -160,6 +160,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ]),
 
+            _buildSectionHeader("Support & Help"),
+            _buildSettingsGroup([
+              _buildSettingItem(
+                icon: Icons.help_outline,
+                title: "Need Help",
+                subtitle: "Contact support and get assistance",
+                onTap: () => context.push('/help'),
+              ),
+              _buildSettingItem(
+                icon: Icons.question_answer_outlined,
+                title: "FAQs",
+                subtitle: "Common questions and answers",
+                onTap: () => context.push('/faq'),
+                showDivider: false,
+              ),
+            ]),
+
             _buildSectionHeader("Account & System"),
             _buildSettingsGroup([
               _buildSettingItem(
