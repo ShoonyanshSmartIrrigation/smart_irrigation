@@ -417,7 +417,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
-import '../data_manager.dart';
 import 'communications/wifi_service.dart';
 import 'communications/bluetooth_service.dart';
 import 'communications/unified_command_service.dart';
@@ -761,6 +760,22 @@ class DashboardService extends ChangeNotifier with WidgetsBindingObserver {
       _isProcessingAutoMode = false;
     }
   }
+
+  Future<void> toggleAllPlantsAutoMode(bool value) async {
+    _dataManager.isSystemSmartAuto = value;
+    for (var plant in _dataManager.plants) {
+      plant.isAutoMode = value;
+    }
+    notifyListeners();
+    try {
+      final plantService = PlantService();
+      plantService.notifyListeners();
+    } catch (e) {
+      debugPrint("Error notifying PlantService: $e");
+    }
+  }
+
+  bool get isAllPlantsAutoMode => _dataManager.isSystemSmartAuto;
 
   void _setAutoModeError() {
     autoModeError = true;

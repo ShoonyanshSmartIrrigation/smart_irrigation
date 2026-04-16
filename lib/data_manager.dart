@@ -30,6 +30,7 @@ class DataManager {
   DataManager._internal();
 
   bool isSystemAutoMode = false;
+  bool isSystemSmartAuto = false;
 
   List<Plant> plants = List.generate(8, (index) {
     return Plant(

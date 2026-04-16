@@ -293,7 +293,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                            await _service.updateSchedule(newSchedule);
                            _showSuccess("Schedule updated and synced");
                          }
-                         if (mounted) Navigator.pop(context);
+                         if (mounted) Navigator.pop(mounted as BuildContext);
                          setState(() => _isLoading = false);
                       } catch (e) {
                         _showError("Failed to save schedule. Check ESP32 connection.");

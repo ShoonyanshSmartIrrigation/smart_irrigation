@@ -29,7 +29,7 @@ class CustomBottomNavBar extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 15,
             offset: const Offset(0, -4),
           ),
@@ -133,7 +133,7 @@ class NavItem extends StatelessWidget {
                   onTap(index);
                 },
                 borderRadius: BorderRadius.circular(30),
-                splashColor: Colors.white.withOpacity(0.1),
+                splashColor: Colors.white.withValues(alpha: 0.1),
                 highlightColor: Colors.transparent,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,

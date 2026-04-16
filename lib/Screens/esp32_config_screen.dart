@@ -5,6 +5,8 @@ import '../core/theme/app_colors.dart';
 
 //-------------------------------------------------------- Esp32ConfigScreen Class ----------------------------------------------------------
 class Esp32ConfigScreen extends StatefulWidget {
+  const Esp32ConfigScreen({super.key});
+
   @override
   State<Esp32ConfigScreen> createState() => _Esp32ConfigScreenState();
 }

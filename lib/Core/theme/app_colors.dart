@@ -24,9 +24,9 @@ class AppColors {
   static const Color loginTextGrey = Color(0xFF757575); // Colors.grey[600]
   static const Color loginTextDarkGrey = Color(0xFF616161); // Colors.grey[700]
   static const Color loginDivider = Color(0xFFE0E0E0); // Colors.grey[300]
-  static const Color loginShadow = Color(0x0D000000); // Colors.black.withOpacity(0.05)
-  static const Color loginHeaderIconBg = Color(0x33FFFFFF); // Colors.white.withOpacity(0.2)
-  static const Color loginSubtitle = Color(0xCCFFFFFF); // Colors.white.withOpacity(0.8)
+  static const Color loginShadow = Color(0x0D000000); // Colors.black.withValues(alpha: 0.05)
+  static const Color loginHeaderIconBg = Color(0x33FFFFFF); // Colors.white.withValues(alpha: 0.2)
+  static const Color loginSubtitle = Color(0xCCFFFFFF); // Colors.white.withValues(alpha: 0.8)
   static const Color loginGoogleButtonBg = Colors.white;
   static const Color loginGoogleButtonText = Colors.black87;
   static const Color loginButtonShadow = Color(0x662E7D32); // primary with opacity
@@ -37,9 +37,9 @@ class AppColors {
   static const Color signupTextGrey = Color(0xFF757575); // Colors.grey[600]
   static const Color signupTextDarkGrey = Color(0xFF616161); // Colors.grey[700]
   static const Color signupDivider = Color(0xFFE0E0E0); // Colors.grey[300]
-  static const Color signupShadow = Color(0x0D000000); // Colors.black.withOpacity(0.05)
-  static const Color signupHeaderIconBg = Color(0x33FFFFFF); // Colors.white.withOpacity(0.2)
-  static const Color signupSubtitle = Color(0xCCFFFFFF); // Colors.white.withOpacity(0.8)
+  static const Color signupShadow = Color(0x0D000000); // Colors.black.withValues(alpha: 0.05)
+  static const Color signupHeaderIconBg = Color(0x33FFFFFF); // Colors.white.withValues(alpha: 0.2)
+  static const Color signupSubtitle = Color(0xCCFFFFFF); // Colors.white.withValues(alpha: 0.8)
   static const Color signupButtonShadow = Color(0x662E7D32); // primary with opacity
   static const Color signupGoogleButtonBg = Colors.white;
   static const Color signupGoogleButtonText = Colors.black87;
@@ -57,11 +57,11 @@ class AppColors {
 
   // Settings Screen
   static const Color settingsSectionText = Color(0xFF2E7D32);
-  static const Color settingsIconBg = Color(0x1A2E7D32); // Color(0xFF2E7D32).withOpacity(0.1)
+  static const Color settingsIconBg = Color(0x1A2E7D32); // Color(0xFF2E7D32).withValues(alpha: 0.1)
   static const Color settingsLogoutIcon = Colors.redAccent;
   static const Color settingsSubtitleGrey = Color(0xFF757575); // Colors.grey[600]
   static const Color settingsDivider = Color(0xFFF5F5F5); // Colors.grey[100]
-  static const Color settingsShadow = Color(0x08000000); // Colors.black.withOpacity(0.03)
+  static const Color settingsShadow = Color(0x08000000); // Colors.black.withValues(alpha: 0.03)
 
   // Schedule Screen
   static const Color scheduleTextDark = Color(0xFF1A1A1A);
@@ -69,7 +69,7 @@ class AppColors {
   static const Color scheduleDeleteIcon = Colors.redAccent;
   static const Color scheduleEmptyIcon = Color(0xFFE0E0E0); // Colors.grey[300]
   static const Color scheduleSubtext = Color(0xFF757575); // Colors.grey[600]
-  static const Color scheduleShadow = Color(0x0D000000); // Colors.black.withOpacity(0.05)
+  static const Color scheduleShadow = Color(0x0D000000); // Colors.black.withValues(alpha: 0.05)
 
   // Plant Control Screen
   static const Color plantControlError = Colors.redAccent;

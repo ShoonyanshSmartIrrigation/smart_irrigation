@@ -15,6 +15,7 @@ class PlantControlScreen extends StatefulWidget {
 //-------------------------------------------------------- _PlantControlScreenState Class ----------------------------------------------------------
 class _PlantControlScreenState extends State<PlantControlScreen> {
   final PlantService _service = PlantService();
+  final DataManager _dataManager = DataManager();
 
   @override
     //-------------------------------------------------------- Init State ----------------------------------------------------------
@@ -181,7 +182,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(15),
+        padding: const EdgeInsets.all(14),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -218,7 +219,7 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                 Text("Moisture: ${plant.moistureLevel}%", style: TextStyle(color: moistureColor, fontSize: 13, fontWeight: FontWeight.bold)),
                 if (plant.isAutoMode)
                   const Padding(
-                    padding: EdgeInsets.only(top: 4.0),
+                    padding: EdgeInsets.only(top: 2.0),
                     child: Text("AUTO MODE", style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.bold)),
                   ),
               ],
@@ -228,12 +229,12 @@ class _PlantControlScreenState extends State<PlantControlScreen> {
                 Switch.adaptive(
                   value: plant.isMotorOn,
                   activeTrackColor: AppColors.primary,
-                  onChanged: _service.isTogglingAll || plant.isAutoMode ? null : (_) => _service.togglePlantMotor(plant),
+                  onChanged: _service.isTogglingAll || plant.isAutoMode || _dataManager.isSystemSmartAuto ? null : (_) => _service.togglePlantMotor(plant),
                 ),
                 Text(
                   hasError ? "OFFLINE" : (plant.isMotorOn ? "ACTIVE" : "INACTIVE"),
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 8,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1,
                     color: hasError ? AppColors.plantControlError : (plant.isMotorOn ? AppColors.plantControlActive : AppColors.plantControlInactive),

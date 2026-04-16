@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../routes/app_routes.dart';
 import '../services/auth_service.dart';
@@ -14,7 +13,7 @@ class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  _LoginScreenState createState() => _LoginScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
 //-------------------------------------------------------- _LoginScreenState Class ----------------------------------------------------------
@@ -276,7 +275,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         side: BorderSide(color: Colors.grey.shade200, width: 1.5),
                       ),
                       elevation: 2,
-                      shadowColor: Colors.black.withOpacity(0.05),
+                      shadowColor: Colors.black.withValues(alpha: 0.05),
                     ).copyWith(
                       overlayColor: WidgetStateProperty.all(Colors.transparent),
                     ),
@@ -383,7 +382,7 @@ class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
   @override
-  _ForgotPasswordScreenState createState() => _ForgotPasswordScreenState();
+  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {

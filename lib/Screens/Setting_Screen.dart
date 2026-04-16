@@ -10,7 +10,7 @@ class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  _SettingsScreenState createState() => _SettingsScreenState();
+  State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 //-------------------------------------------------------- _SettingsScreenState Class ----------------------------------------------------------
@@ -133,7 +133,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     themeService.isDarkMode ? "Enabled" : "Disabled",
                     style: TextStyle(color: AppColors.settingsSubtitleGrey, fontSize: 13),
                   ),
-                  activeColor: AppColors.primary,
+                  activeThumbColor: AppColors.primary,
                   value: themeService.isDarkMode,
                   onChanged: (value) {
                     themeService.toggleTheme(value);

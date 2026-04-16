@@ -14,7 +14,7 @@ class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
 
   @override
-  _SignupScreenState createState() => _SignupScreenState();
+  State<SignupScreen> createState() => _SignupScreenState();
 }
 
 //-------------------------------------------------------- _SignupScreenState Class ----------------------------------------------------------
@@ -370,7 +370,7 @@ class _SignupScreenState extends State<SignupScreen> {
                           side: BorderSide(color: Colors.grey.shade200, width: 1.5),
                         ),
                         elevation: 2,
-                        shadowColor: Colors.black.withOpacity(0.05),
+                        shadowColor: Colors.black.withValues(alpha: 0.05),
                       ).copyWith(
                         overlayColor: WidgetStateProperty.all(Colors.transparent),
                       ),

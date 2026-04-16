@@ -20,13 +20,19 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final DashboardService _service = DashboardService();
 
-  String? City;
+  String? city;
   Map<String, dynamic>? weather;
   bool loading = false;
 
-  Future<void> updateWeather(StateSetter setState, String name) async {
+  Future<void> updateWeather(StateSetter setState, String name, {double? lat, double? lon}) async {
     setState(() => loading = true);
-    final data = await WeatherService.fetchWeather(name);
+    Map<String, dynamic>? data;
+    if (lat != null && lon != null) {
+      data = await WeatherService.fetchWeatherByCoords(lat, lon);
+    } else {
+      data = await WeatherService.fetchWeather(name);
+    }
+    
     if (data != null) {
       weather = data;
     }
@@ -35,10 +41,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> loadCity() async {
-    final saved = await CityService.getCity();
-    if (saved != null) {
-      City = saved;
-      await updateWeather(setState, saved);
+    final info = await CityService.getCityInfo();
+    final savedName = info['name'];
+    final lat = info['lat'];
+    final lon = info['lon'];
+    
+    if (savedName != null) {
+      city = savedName;
+      await updateWeather(setState, savedName, lat: lat, lon: lon);
     }
     setState(() {});
   }
@@ -117,10 +127,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           height: 60,
                           width: MediaQuery.of(context).size.width * 0.8,
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.05),
+                            color: AppColors.primary.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(15),
                             border: Border.all(
-                              color: AppColors.primary.withOpacity(0.1),
+                              color: AppColors.primary.withValues(alpha: 0.1),
                               width: 1,
                             ),
                           ),
@@ -155,7 +165,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         : FontWeight.w500,
                                     color: isSelected
                                         ? AppColors.primary
-                                        : (isDark ? Colors.white24 : AppColors.grey.withOpacity(0.4)),
+                                        : (isDark ? Colors.white24 : AppColors.grey.withValues(alpha: 0.4)),
                                   ),
                                 ),
                               );
@@ -590,6 +600,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _service.autoModeError ? Colors.red : Colors.blue,
             isError: _service.autoModeError,
           ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: Divider(height: 1, color: AppColors.dashboardDivider),
+          ),
+          _buildToggleRow(
+            "Smart Auto(All Plants)",
+            _service.isAllPlantsAutoMode,
+            Icons.psychology_rounded,
+            (val) => _service.toggleAllPlantsAutoMode(val),
+            Colors.purple.withValues(alpha: 0.1),
+            Colors.purple,
+          ),
         ],
       ),
     );
@@ -809,33 +831,86 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget weatherHomeFunction() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     void openEditDialog(BuildContext context, StateSetter setState) {
-      final controller = TextEditingController(text: City ?? "");
+      final controller = TextEditingController(text: city ?? "");
+      List<Map<String, dynamic>> suggestions = [];
+      bool isSearching = false;
+
       showDialog(
         context: context,
-        builder: (_) => AlertDialog(
-          title: const Text("Set City"),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(hintText: "Enter City"),
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text("Set City"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  decoration: InputDecoration(
+                    hintText: "Enter City",
+                    suffixIcon: isSearching
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: Padding(
+                              padding: EdgeInsets.all(12.0),
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : null,
+                  ),
+                  onChanged: (value) async {
+                    if (value.length >= 2) {
+                      setDialogState(() => isSearching = true);
+                      final results = await WeatherService.fetchCitySuggestions(value);
+                      setDialogState(() {
+                        suggestions = results;
+                        isSearching = false;
+                      });
+                    } else {
+                      setDialogState(() => suggestions = []);
+                    }
+                  },
+                ),
+                if (suggestions.isNotEmpty)
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    width: double.maxFinite,
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: suggestions.length,
+                      itemBuilder: (context, index) {
+                        final s = suggestions[index];
+                        return ListTile(
+                          title: Text("${s['name']}, ${s['country']}"),
+                          subtitle: s['state'].isNotEmpty ? Text(s['state']) : null,
+                          onTap: () async {
+                            final cityName = s['name'];
+                            final stateName = s['state'];
+                            final lat = s['lat'];
+                            final lon = s['lon'];
+                            
+                            context.pop();
+                            
+                            String storageName = stateName.isNotEmpty ? "$cityName, $stateName" : cityName;
+                            await CityService.saveCity(storageName, lat: lat, lon: lon);
+                            city = storageName;
+                            
+                            setState(() {});
+                            await updateWeather(setState, cityName, lat: lat, lon: lon);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => context.pop(),
+                child: const Text("Cancel"),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => context.pop(),
-              child: const Text("Cancel"),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final name = controller.text.trim();
-                if (name.isEmpty) return;
-                context.pop();
-                await CityService.saveCity(name);
-                City = name;
-                setState(() {});
-                await updateWeather(setState, name);
-              },
-              child: const Text("Save"),
-            ),
-          ],
         ),
       );
     }
@@ -912,7 +987,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: City == null
+                child: city == null
                     ? Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -938,19 +1013,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          City ?? "",
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
+                        Expanded(
+                          child: Text(
+                            city ?? "",
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.edit),
-                          onPressed: () => openEditDialog(context, setState),
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 20),
+                              onPressed: () => openEditDialog(context, setState),
+                              constraints: const BoxConstraints(),
+                              padding: EdgeInsets.zero,
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.refresh, size: 20),
+                              onPressed: () async {
+                                final info = await CityService.getCityInfo();
+                                await updateWeather(setState, info['name'] ?? "", lat: info['lat'], lon: info['lon']);
+                              },
+                              constraints: const BoxConstraints(),
+                              padding: EdgeInsets.zero,
+                            ),
+                          ],
                         ),
                       ],
                     ),
+                    if (weather != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          "Last synced: ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}",
+                          style: TextStyle(fontSize: 10, color: AppColors.grey.withValues(alpha: 0.6)),
+                        ),
+                      ),
+                    const SizedBox(height: 10),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [

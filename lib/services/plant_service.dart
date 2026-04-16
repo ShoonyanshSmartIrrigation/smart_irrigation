@@ -56,6 +56,19 @@ class PlantService extends ChangeNotifier {
     _syncTimer?.cancel();
   }
 
+  void runAutoLogic() {
+    for (var plant in _dataManager.plants) {
+      bool isAutoModeActive = plant.isAutoMode || _dataManager.isSystemSmartAuto;
+      if (isAutoModeActive) {
+        if (plant.moistureLevel < plant.minMoistureThreshold && !plant.isMotorOn) {
+          togglePlantMotor(plant, isOn: true);
+        } else if (plant.moistureLevel >= plant.maxMoistureThreshold && plant.isMotorOn) {
+          togglePlantMotor(plant, isOn: false);
+        }
+      }
+    }
+  }
+
   // Fetch moisture data from ESP32 or Firebase
   Future<bool> fetchMoistureData({int retry = 1}) async {
     if (isSyncing || _isDisposed) return false;
@@ -76,7 +89,8 @@ class PlantService extends ChangeNotifier {
             }
 
             // Auto Mode logic based on thresholds
-            if (plant.isAutoMode && !_dataManager.isSystemAutoMode) {
+            bool isAutoModeActive = plant.isAutoMode || _dataManager.isSystemSmartAuto;
+            if (isAutoModeActive) {
               if (plant.moistureLevel < plant.minMoistureThreshold &&
                   !plant.isMotorOn) {
                 togglePlantMotor(plant, isOn: true);
