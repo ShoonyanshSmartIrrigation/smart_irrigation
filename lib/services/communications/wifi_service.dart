@@ -38,16 +38,20 @@ class WifiService {
       if (snapshot.exists) {
         final data = Map<String, dynamic>.from(snapshot.value as Map);
 
-        int lastSeen = data["lastSeen"] ?? 0;
-        int currentTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-        bool isOffline = (currentTime - lastSeen) > 60;
+        int lastSeenRaw = data["lastSeen"] ?? 0;
+        // Firebase ServerValue.timestamp is in milliseconds. 
+        // If it's > 10,000,000,000 it's likely milliseconds.
+        int lastSeenMs = lastSeenRaw > 10000000000 ? lastSeenRaw : lastSeenRaw * 1000;
+        
+        int currentTimeMs = DateTime.now().millisecondsSinceEpoch;
+        bool isOffline = (currentTimeMs - lastSeenMs).abs() > 60000; // 60 seconds
 
         // Transform Firebase data to match ESP32 endpoint format briefly
         return {
           "status": isOffline ? "offline" : "ok",
           "remote": true,
           "deviceId": deviceId,
-          "lastSeen": lastSeen,
+          "lastSeen": lastSeenMs ~/ 1000, // Standardize to seconds for statusMap
           "mainMotor": data["motors"]?["0"] == true ? "on" : "off",
           "activeMotorsList":
           (data["motors"] as Map?)?.entries
