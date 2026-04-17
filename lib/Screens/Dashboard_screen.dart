@@ -341,9 +341,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildConnectionBadge() {
     bool online = _service.connectionStatus == DashboardStrings.systemOnline;
     bool noNetwork = _service.connectionStatus == DashboardStrings.noNetwork;
-    
-    Color statusColor = online ? Colors.greenAccent : (noNetwork ? Colors.orangeAccent : Colors.redAccent);
-    String displayStatus = online ? _service.connectionType : _service.connectionStatus;
+
+    Color statusColor = online
+        ? Colors.greenAccent
+        : (noNetwork ? Colors.orangeAccent : Colors.redAccent);
+    String displayStatus = online
+        ? _service.connectionType
+        : _service.connectionStatus;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -956,7 +960,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (context, setState) {
         final temp = weather?['main']?['temp'];
         final humidity = weather?['main']?['humidity'];
-        final pressure = weather?['main']?['pressure'];
+        // final pressure = weather?['main']?['pressure'];
         final feelsLike = weather?['main']?['feels_like'];
         final windSpeed = weather?['wind']?['speed'];
         String? condition;
@@ -1051,7 +1055,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 15),
+                          const SizedBox(height: 20),
                           Row(
                             children: [
                               detail(
@@ -1063,16 +1067,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 Icons.air,
                                 "${windSpeed ?? '--'} m/s",
                                 "Wind",
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              detail(
-                                Icons.speed,
-                                "${pressure ?? '--'} hPa",
-                                "Pressure",
                               ),
                               detail(
                                 Icons.thermostat,
